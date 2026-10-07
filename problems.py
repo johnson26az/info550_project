@@ -2,8 +2,8 @@
 This file will contain your the code for your problems. 
 '''
 
-#import numpy as np
-#import cv2
+import numpy as np
+import cv2
 
 class Game:
     def __init__(self, problem, pZero, pOne,verbose=True):
@@ -117,8 +117,44 @@ class TicTacToe:
 #
 #######################################################################
 
+'''
+Represents the crossword puzzle.
+'''
+class Crossword:
+   def __init__(self, grid, clues):
+      self.grid = grid
+      self.clues = clues
+      self.rows = len(grid)
+      self.cols = len(grid[0])
+
+   def is_blocked(self, row, col):
+      return self.grid[row][col] == '#'
+
+   def get_clue(self, clue_id):
+      return self.clues.get(clue_id)
+
+   def set_cell_letter(self, row, col, value):
+      if 0 <= row < self.rows and 0 <= col < self.cols:
+         self.grid[row][col] = value
+
+   def print_grid(self):
+      for row in self.grid:
+         print("".join(row))
+
+   def print_clues(self):
+      print("Clues:\n")
+      print("Across:\n")
+      for clue_id, clue in self.clues["across"].items():
+         print(f"{clue_id}: {clue}")
+
+      print("Down:\n")
+      for clue_id, clue in self.clues["down"].items():
+         print(f"{clue_id}: {clue}")
+
+
 import csv
 from pathlib import Path
+
 
 '''
 Defines the properties of a requirement
@@ -200,7 +236,7 @@ class Specification:
 
 
 def main():
-
+   '''
    # getting the input file path
    input_file_name = 'requirements_only.csv'
    input_file = Path(__file__).parent / "data" / input_file_name
@@ -218,6 +254,20 @@ def main():
 
    csp = spec.build_csp()
    print(csp)
+   '''
+
+   from crosswords.puzzle01 import crossword # loading the crossword puzzle
+
+   cw = Crossword(
+      grid = [list(row) for row in crossword["grid"]], # loads the grid
+      clues = crossword["clues"] # loads the clues
+   )
+
+   print("\nCROSSWORD GRID\n")
+   cw.print_grid()
+   cw.print_clues()
+   
+
 
 if __name__ == "__main__":
    main()
