@@ -141,8 +141,10 @@ class Crossword:
          self.grid[row][col] = value
 
    def print_grid(self):
+      print("\nCROSSWORD PUZZLE")
       for row in self.grid:
          print("".join(row))
+      print("\n")
 
    def print_clues(self):
       print("Clues:\n")
@@ -178,11 +180,16 @@ class CrosswordPuzzle:
       # across slots
       for row in range(rows):
          for col in range(cols):
-            if not self.crossword.is_blocked(row, col):
+            is_start = (
+               not self.crossword.is_blocked(row, col)
+               and (col == 0 or self.crossword.is_blocked(row, col - 1))
+            )
+            if is_start:
                start = col
-               while col < cols and not self.crossword.is_blocked(row, col):
-                  col += 1
-               length = col - start
+               end = col
+               while end < cols and not self.crossword.is_blocked(row, end):
+                  end += 1
+               length = end - start
 
                if length > 1:
                   slot_id = f"across_{row+1}-{start+1}"
@@ -196,11 +203,16 @@ class CrosswordPuzzle:
       # down slots
       for col in range(cols):
          for row in range(rows):
-            if not self.crossword.is_blocked(row, col):
+            is_start = (
+               not self.crossword.is_blocked(row, col)
+               and (row == 0 or self.crossword.is_blocked(row - 1, col))
+            )
+            if is_start:
                start = row
-               while row < rows and not self.crossword.is_blocked(row, col):
-                  row += 1
-               length = row - start
+               end = row
+               while end < rows and not self.crossword.is_blocked(end, col):
+                  end += 1
+               length = end - start
 
                if length > 1:
                   slot_id = f"down_{start+1}-{col+1}"
@@ -214,6 +226,7 @@ class CrosswordPuzzle:
 
    # find intersections between slots and build the graph structure.
    def find_intersections(self):
+      # initializing the graph structure
       for slot_id in self.slots:
          self.graph[slot_id] = {
             "neighbors": [],
@@ -222,22 +235,29 @@ class CrosswordPuzzle:
 
       # compare every pair of slots to find intersections
       slot_ids = list(self.slots.keys())
+
       for i in range(len(slot_ids)):
          for j in range(i + 1, len(slot_ids)):
-            slot1_id = slot_ids[i]
-            slot2_id = slot_ids[j]
+            s1 = slot_ids[i]
+            s2 = slot_ids[j]
 
             # check for intersections between the two slots
-            cells1 = set(self.slots[slot1_id]["cells"])
-            cells2 = set(self.slots[slot2_id]["cells"])
-            intersections = cells1 & cells2
-            if intersections:
-               self.graph[slot1_id]["neighbors"].append(slot2_id)
-               self.graph[slot2_id]["neighbors"].append(slot1_id)
-               for cell in intersections:
-                  self.graph[slot1_id]["intersections"][cell] = slot2_id
-                  self.graph[slot2_id]["intersections"][cell] = slot1_id
+            cells1 = self.slots[s1]["cells"]
+            cells2 = self.slots[s2]["cells"]
 
+            # check each cell pair
+            for index1, cell1 in enumerate(cells1):
+               if cell1 in cells2:
+                  index2 = cells2.index(cell1)
+
+                  # record the neighbor relationship
+                  self.graph[s1]["neighbors"].append(s2)
+                  self.graph[s2]["neighbors"].append(s1)
+
+                  # record the intersection index pair
+                  self.graph[s1]["intersections"][s2] = (index1, index2)
+                  self.graph[s2]["intersections"][s1] = (index2, index1)
+   
    def build_domain(self):
       word_bank = self.crossword.word_bank
 
@@ -396,22 +416,34 @@ def main():
    print(csp)
    '''
 
-   from crosswords.puzzle01 import crossword # loading the crossword puzzle
+   from crosswords.puzzle01 import crossword as crossword01
+   from crosswords.puzzle02 import crossword as crossword02
+   from crosswords.puzzle03 import crossword as crossword03
+   from algorithms import Node2VecAgent
 
    cw = Crossword(
-      grid = [list(row) for row in crossword["grid"]], # loads the grid
-      clues = crossword["clues"], # loads the clues
-      word_bank = crossword["word_bank"]
+      grid = [list(row) for row in crossword02["grid"]], # loads the grid
+      clues = crossword02["clues"], # loads the clues
+      word_bank = crossword02["word_bank"]
    )
 
    cw.print_grid()
    #cw.print_clues()
 
-   # need to make a graph representation of the crossword puzzle
+   # making a graph representation of the crossword puzzle
    puzzle = CrosswordPuzzle(cw)
+   puzzle.build_graph()
    #puzzle.print_graph()
-   
 
+   agent = Node2VecAgent(puzzle)
+   agent.train_embedding()
+
+   solution = agent.solve()
+   agent.apply_solution_to_grid(solution)
+
+   print("\nAGENT APPLIED SOLUTION TO GRID")
+   puzzle.crossword.print_grid()
+   
 
 if __name__ == "__main__":
    main()

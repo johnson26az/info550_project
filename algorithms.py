@@ -67,7 +67,7 @@ class Node2VecAgent:
   def rank_candidates(self, slot_id):
     candidates = self.puzzle.domain[slot_id]
     scored = [(word, self.score_word(slot_id, word)) for word in candidates]
-    scored.sort(key=lambda x: x[1], reverse=True)
+    scored.sort(key = lambda x: x[1], reverse = True)
     
     return scored
 
@@ -83,18 +83,61 @@ class Node2VecAgent:
     
     return True
 
-  # solving the crossword puzzle
-  # using greedy approach and consistency checks
+  # returns the tuple used as the min key for selecting the next unassigned slot
+  def slot_priority(self, slot_id, assignment):
+    consistent_count = sum(
+      self.is_consistent(slot_id, word, assignment)
+      for word in self.puzzle.domain[slot_id]
+    )
+    neighbor_count = len(self.puzzle.graph[slot_id]["neighbors"])
+    
+    return (consistent_count, neighbor_count)
+
+  # returns the unassigned slot id with minimum priority (consistent_count, neighbor_count)
+  def select_unassigned_slot(self, assignment):
+    unassigned = [
+      slot_id for slot_id in self.puzzle.slots
+      if slot_id not in assignment
+    ]
+
+    return min(unassigned, key = lambda slot_id: self.slot_priority(slot_id, assignment))
+
+  def has_available_candidate(self, slot_id, assignment):
+    return any(
+      self.is_consistent(slot_id, word, assignment)
+      for word in self.puzzle.domain[slot_id]
+    )
+
+  def search(self, assignment):
+        if len(assignment) == len(self.puzzle.slots):
+          return True
+  
+        slot_id = self.select_unassigned_slot(assignment)
+  
+        # keeps trying words for the current slot until a consistent assignment is found
+        for word, _ in self.rank_candidates(slot_id):
+          if not self.is_consistent(slot_id, word, assignment):
+            continue
+  
+          assignment[slot_id] = word
+  
+          if all(
+            self.has_available_candidate(other_id, assignment)
+            for other_id in self.puzzle.slots
+            if other_id not in assignment
+          ) and self.search(assignment):
+            return True
+  
+          del assignment[slot_id]
+        
+        return False
+
+  # Solve the crossword with Node2Vec-ranked candidates and backtracking.
   def solve(self):
     assignment = {}
 
-    for slot_id in self.puzzle.slots:
-      ranked = self.rank_candidates(slot_id)
-
-      for word, score in ranked:
-        if self.is_consistent(slot_id, word, assignment):
-          assignment[slot_id] = word
-          break
+    if not self.search(assignment):
+      raise ValueError("No complete crossword solution exists for this word bank.")
 
     return assignment
 
