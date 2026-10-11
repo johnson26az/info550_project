@@ -59,5 +59,20 @@ crossword = {
             19: "Vehicle on tracks",
             20: "Places people live"
         }
-    }
+    },
+
+    "word_bank": [
+        "START", "AREA", "ROAMS", "NOTE", "EVENT", "SAIL", "ALONE", "TIME",
+        "PLANE", "RISE", "OCEAN", "LEAF", "SMILE", "ROPE", "TRAIN", "MOON",
+        "HOMES", "WAVE", "BEGIN", "COMMENCE", "OPEN", "INITIATE", "LAUNCH",
+        "ZONE", "DISTRICT", "SECTOR", "FIELD", "ROVES", "MEANDERS", "DRIFTS",
+        "WANDERS", "MEMO", "TEXT", "LINE", "OCCURRENCE", "INCIDENT", "HAPPENING",
+        "GLIDE", "SOLO", "LONE", "SINGLE", "HOURS", "MINUTES", "SECONDS",
+        "JET", "AIRCRAFT", "LIFT", "ASCEND", "UP", "SEA", "GULF", "STEM", "ROOT",
+        "SEED", "GRIN", "BEAM", "CABLE", "TRAM", "METRO", "PLAN",
+        "LUNA", "HOUSES", "DWELLINGS", "SURF", "CREST", "SURE",
+        "TONE", "ASSERT", "RAIN", "TEE", "AGAIN", "AMEN", "CERTAIN",
+        "POSITIVE", "TIMBRE", "PITCH", "CLAIM", "DECLARE", "STATE", "DRIZZLE",
+        "PEG", "REPEAT", "TACTIC", "METHOD", "EGGS"
+    ]
 }

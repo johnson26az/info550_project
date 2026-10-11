@@ -114,16 +114,19 @@ class TicTacToe:
 
 #######################################################################
 # Addition to the template for INFO 450/550.
-#
+# problems.py
 #######################################################################
+
+import networkx as nx
 
 '''
 Represents the crossword puzzle.
 '''
 class Crossword:
-   def __init__(self, grid, clues):
+   def __init__(self, grid, clues, word_bank):
       self.grid = grid
       self.clues = clues
+      self.word_bank = word_bank
       self.rows = len(grid)
       self.cols = len(grid[0])
 
@@ -151,6 +154,143 @@ class Crossword:
       for clue_id, clue in self.clues["down"].items():
          print(f"{clue_id}: {clue}")
 
+   def get_word_bank(self):
+      return self.word_bank
+
+class CrosswordPuzzle:
+   def __init__(self, crossword):
+      self.crossword = crossword
+      self.slots = {}  # holds the crossword slots for each clue
+      self.graph = {}  # this will hold the
+      self.domain = {} # will hold the candidate words
+
+      self._extract_slots()
+      self.find_intersections()
+      self.build_domain()
+
+   # extract all the slots from the crossword grid
+   def _extract_slots(self):
+      # logic to extract slots from the crossword grid
+      grid = self.crossword.grid
+      rows = self.crossword.rows
+      cols = self.crossword.cols
+
+      # across slots
+      for row in range(rows):
+         for col in range(cols):
+            if not self.crossword.is_blocked(row, col):
+               start = col
+               while col < cols and not self.crossword.is_blocked(row, col):
+                  col += 1
+               length = col - start
+
+               if length > 1:
+                  slot_id = f"across_{row+1}-{start+1}"
+                  cells = [(row, c) for c in range(start, start + length)]
+                  self.slots[slot_id] = {
+                     "id": slot_id,
+                     "direction": "across",
+                     "cells": cells,
+                     "length": length
+                  }
+      # down slots
+      for col in range(cols):
+         for row in range(rows):
+            if not self.crossword.is_blocked(row, col):
+               start = row
+               while row < rows and not self.crossword.is_blocked(row, col):
+                  row += 1
+               length = row - start
+
+               if length > 1:
+                  slot_id = f"down_{start+1}-{col+1}"
+                  cells = [(r, col) for r in range(start, start + length)]
+                  self.slots[slot_id] = {
+                     "id": slot_id,
+                     "direction": "down",
+                     "cells": cells,
+                     "length": length
+                  }
+
+   # find intersections between slots and build the graph structure.
+   def find_intersections(self):
+      for slot_id in self.slots:
+         self.graph[slot_id] = {
+            "neighbors": [],
+            "intersections": {} # this will be the intersections with other slots
+         }
+
+      # compare every pair of slots to find intersections
+      slot_ids = list(self.slots.keys())
+      for i in range(len(slot_ids)):
+         for j in range(i + 1, len(slot_ids)):
+            slot1_id = slot_ids[i]
+            slot2_id = slot_ids[j]
+
+            # check for intersections between the two slots
+            cells1 = set(self.slots[slot1_id]["cells"])
+            cells2 = set(self.slots[slot2_id]["cells"])
+            intersections = cells1 & cells2
+            if intersections:
+               self.graph[slot1_id]["neighbors"].append(slot2_id)
+               self.graph[slot2_id]["neighbors"].append(slot1_id)
+               for cell in intersections:
+                  self.graph[slot1_id]["intersections"][cell] = slot2_id
+                  self.graph[slot2_id]["intersections"][cell] = slot1_id
+
+   def build_domain(self):
+      word_bank = self.crossword.word_bank
+
+      for slot_id, slot in self.slots.items():
+         length = slot["length"]
+
+         # filter by length
+         candidates = [word for word in word_bank if len(word) == length]
+         self.domain[slot_id] = candidates
+
+   def print_graph(self):
+      print("\nCROSSWORD STRUCTURE\n")
+      for slot_id, data in self.graph.items():
+         print(f"Slot ID: {slot_id}")
+         print(f"  Neighbors: {data['neighbors']}")
+         print(f"  Intersections: {data['intersections']}")
+
+   # important for building the crossword graph structure.
+   # this is used by the Node2Vec agent to build the graph for embedding
+   def build_graph(self):
+      G = nx.Graph()
+
+      # add nodes for each slot
+      for slot_id, slot in self.slots.items():
+         G.add_node(slot_id, type = "word", length = slot["length"])
+
+      # add word nodes
+      for word in self.crossword.word_bank:
+         G.add_node(word, type = "word", length = len(word))
+
+      # slot <=> word edges
+      for slot_id, slot in self.slots.items():
+         for word in self.crossword.word_bank:
+            if len(word) == slot["length"]:
+               G.add_edge(slot_id, word, weight = 1.0)
+
+      # slot <=> slot edges (intersections)
+      for s1, data in self.graph.items():
+         for s2, (i1, i2) in data["intersections"].items():
+            G.add_edge(s1, s2, weight = 2.0)
+
+      # word <=> word edges (shared letters)
+      words = self.crossword.word_bank
+
+      for w1 in words:
+         for w2 in words:
+            if w1 != w2:
+               shared = sum(1 for a, b in zip(w1, w2) if a == b)
+               if shared > 0:
+                  G.add_edge(w1, w2, weight = shared)
+
+      self.G = G
+   
 
 import csv
 from pathlib import Path
@@ -260,12 +400,16 @@ def main():
 
    cw = Crossword(
       grid = [list(row) for row in crossword["grid"]], # loads the grid
-      clues = crossword["clues"] # loads the clues
+      clues = crossword["clues"], # loads the clues
+      word_bank = crossword["word_bank"]
    )
 
-   print("\nCROSSWORD GRID\n")
    cw.print_grid()
-   cw.print_clues()
+   #cw.print_clues()
+
+   # need to make a graph representation of the crossword puzzle
+   puzzle = CrosswordPuzzle(cw)
+   #puzzle.print_graph()
    
 
 
