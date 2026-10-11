@@ -2,3 +2,5 @@ numpy
 scipy
 opencv-python
 matplotlib
+networkx
+node2vec
