@@ -159,6 +159,7 @@ class Crossword:
    def get_word_bank(self):
       return self.word_bank
 
+
 class CrosswordPuzzle:
    def __init__(self, crossword):
       self.crossword = crossword
@@ -166,12 +167,23 @@ class CrosswordPuzzle:
       self.graph = {}  # this will hold the
       self.domain = {} # will hold the candidate words
 
-      self._extract_slots()
+      self.extract_slots()
       self.find_intersections()
       self.build_domain()
 
+      '''
+      # for debugging purposes
+      print("\nDOMAIN CHECK:")
+      for slot_id, domain in self.domain.items():
+         if len(domain) == 0:
+            print(f"EMPTY DOMAIN → {slot_id}")
+         else:
+            print(f"{slot_id}: {len(domain)} candidates")
+      '''
+
+
    # extract all the slots from the crossword grid
-   def _extract_slots(self):
+   def extract_slots(self):
       # logic to extract slots from the crossword grid
       grid = self.crossword.grid
       rows = self.crossword.rows
@@ -224,6 +236,7 @@ class CrosswordPuzzle:
                      "length": length
                   }
 
+
    # find intersections between slots and build the graph structure.
    def find_intersections(self):
       # initializing the graph structure
@@ -257,16 +270,36 @@ class CrosswordPuzzle:
                   # record the intersection index pair
                   self.graph[s1]["intersections"][s2] = (index1, index2)
                   self.graph[s2]["intersections"][s1] = (index2, index1)
-   
+
+
+   # builds the domain for each slot based on the word bank and the crossword grid.
    def build_domain(self):
       word_bank = self.crossword.word_bank
 
       for slot_id, slot in self.slots.items():
          length = slot["length"]
+         cells = slot["cells"]
 
-         # filter by length
-         candidates = [word for word in word_bank if len(word) == length]
+         candidates = []
+         for word in word_bank:
+            if len(word) != length:
+               continue
+
+            fits = True
+
+            for (row, col), letter in zip(cells, word):
+               grid_letter = self.crossword.grid[row][col]
+
+               # only reject if the grid has a FIXED letter that doesn't match the candidate word
+               if grid_letter not in ['#', ' '] and grid_letter != letter:
+                  fits = False
+                  break
+
+            if fits:
+               candidates.append(word)
+
          self.domain[slot_id] = candidates
+
 
    def print_graph(self):
       print("\nCROSSWORD STRUCTURE\n")
@@ -274,6 +307,7 @@ class CrosswordPuzzle:
          print(f"Slot ID: {slot_id}")
          print(f"  Neighbors: {data['neighbors']}")
          print(f"  Intersections: {data['intersections']}")
+
 
    # important for building the crossword graph structure.
    # this is used by the Node2Vec agent to build the graph for embedding
@@ -422,9 +456,15 @@ def main():
    from algorithms import Node2VecAgent
 
    cw = Crossword(
-      grid = [list(row) for row in crossword02["grid"]], # loads the grid
-      clues = crossword02["clues"], # loads the clues
-      word_bank = crossword02["word_bank"]
+      #grid = [list(row) for row in crossword03["grid"]], # loads the grid
+
+      # clearing the grid to make it empty for the agent to fill in
+      grid = [
+         [('#' if ch == '#' else ' ') for ch in row]
+         for row in crossword03["grid"]
+      ],
+      clues = crossword03["clues"], # loads the clues
+      word_bank = crossword03["word_bank"]
    )
 
    cw.print_grid()
