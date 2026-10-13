@@ -120,6 +120,17 @@ class TicTacToe:
 import networkx as nx
 
 '''
+helper functions
+'''
+# Normalizes the grid to ensure that blocked cells are represented by '#' and empty cells by ' '.
+def normalize_grid(grid):
+   return [
+      [('#' if ch == '#' else ' ') for ch in row]
+      for row in grid
+   ]
+
+
+'''
 Represents the crossword puzzle.
 '''
 class Crossword:
@@ -166,6 +177,7 @@ class CrosswordPuzzle:
       self.slots = {}  # holds the crossword slots for each clue
       self.graph = {}  # this will hold the
       self.domain = {} # will hold the candidate words
+      self.assignment = {} # will hold the current assignment of words to slots
 
       self.extract_slots()
       self.find_intersections()
@@ -344,7 +356,17 @@ class CrosswordPuzzle:
                   G.add_edge(w1, w2, weight = shared)
 
       self.G = G
-   
+
+
+class PuzzleGame:
+   def __init__(self, problem, agent):
+      self.problem = problem
+      self.agent = agent
+
+
+
+
+
 
 import csv
 from pathlib import Path
@@ -456,13 +478,7 @@ def main():
    from algorithms import Node2VecAgent
 
    cw = Crossword(
-      #grid = [list(row) for row in crossword03["grid"]], # loads the grid
-
-      # clearing the grid to make it empty for the agent to fill in
-      grid = [
-         [('#' if ch == '#' else ' ') for ch in row]
-         for row in crossword03["grid"]
-      ],
+      grid = normalize_grid(crossword03["grid"]), # clear and loads the grid
       clues = crossword03["clues"], # loads the clues
       word_bank = crossword03["word_bank"]
    )
@@ -476,9 +492,19 @@ def main():
    #puzzle.print_graph()
 
    agent = Node2VecAgent(puzzle)
-   agent.train_embedding()
 
-   solution = agent.solve()
+   # the agent solving the crossword puzzle
+   while len(puzzle.assignment) < len(puzzle.slots):
+      move = agent.get_move(puzzle)
+      
+      if move is None:
+         print("No more moves available.")
+         break
+
+      slot_id, word = move
+      puzzle.assignment[slot_id] = word
+   
+   solution = puzzle.assignment
    agent.apply_solution_to_grid(solution)
 
    print("\nAGENT APPLIED SOLUTION TO GRID")

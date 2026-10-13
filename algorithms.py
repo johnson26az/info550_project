@@ -33,14 +33,46 @@ resources for understanding and using the Node2Vec.
 
 this will be the agent solving the crossword puzzle. it uses the word bank to generate embeddings for each word and
 then leverages these embeddings to make informed decisions about word placement.
+
+refactor the node2vec agent to be simple and act like a greedy agent. it does not utilize backtracking or any other search strategy.
+it simply selects the next unassigned slot and ranks the candidate words based on their embeddings.
+it then selects the highest-ranked word that is consistent with the current assignment.
 '''
 class Node2VecAgent:
   def __init__(self, puzzle):
-    self.puzzle = puzzle # crossword puzzle instance
+    self.puzzle = puzzle
     self.model = None
 
-  # train the Node2Vec model on the crossword puzzle graph
-  def train_embedding(self):  
+
+  def __str__(self):
+    return "Node2Vec Agent"
+
+
+  # abstract interface that returns a single move for the agent to make. this will be used by the problem to get the next move from the agent.
+  def get_move(self, problem):
+    # ensuring the graph exists
+    if not hasattr(problem, "G"):
+      problem.build_graph()
+
+    # training embeddeings once for the puzzle graph
+    if self.model is None:
+      self._train_embedding()
+
+    #  pick the next unassigned slot
+    slot_id = self.select_unassigned_slot(problem.assignment)
+
+    # rank the candidate words for the slot based on their embeddings
+    for word, _ in self._rank_candidates(slot_id):
+      # check if the word is consistent with the current assignment
+      if self._is_consistent(slot_id, word, problem.assignment):
+        return (slot_id, word)
+
+    # no consistent found
+    return None
+
+
+  # train the Node2Vec embeddings
+  def _train_embedding(self):  
     if not hasattr(self.puzzle, "G"):
       raise ValueError("The puzzle graph is not built.")
 
@@ -52,94 +84,48 @@ class Node2VecAgent:
       p = 1.0, # return parameter
       q =  1.0, # in-out parameter
       workers = 4, # number of parallel workers
-      )
+    )
 
     self.model = node2vec.fit(window=10, min_count=1)
 
+
   # score the similarity between two nodes based on their embeddings
-  def score_word(self, slot_id, word):
+  def _score_word(self, slot_id, word):
     slot_vec = self.model.wv[slot_id]
     word_vec = self.model.wv[word]
   
     return cosine_similarity(slot_vec, word_vec)
 
-  # rank all the candidate words for a slot
-  def rank_candidates(self, slot_id):
+
+  # rank the candidate words for a slot
+  def _rank_candidates(self, slot_id):
     candidates = self.puzzle.domain[slot_id]
-    scored = [(word, self.score_word(slot_id, word)) for word in candidates]
+    scored = [(word, self._score_word(slot_id, word)) for word in candidates]
     scored.sort(key = lambda x: x[1], reverse = True)
     
     return scored
 
+
   # checking for consistency for the already assigned words.
   # this will ensure that the word fits all the intersections with already assigned words.
-  def is_consistent(self, slot_id, word, assignment):
+  def _is_consistent(self, slot_id, word, assignment):
     # intesections are neighbor_slot_id -> (index_self, index_neighbor)
     for neighbor_id, (index_self, index_neighbor) in self.puzzle.graph[slot_id]["intersections"].items():
       if neighbor_id in assignment:
-        neighbor_word = assignment[neighbor_id]
-        if word[index_self] != neighbor_word[index_neighbor]:
+        if word[index_self] != assignment[neighbor_id][index_neighbor]:
           return False
     
     return True
 
-  # returns the tuple used as the min key for selecting the next unassigned slot
-  def slot_priority(self, slot_id, assignment):
-    consistent_count = sum(
-      self.is_consistent(slot_id, word, assignment)
-      for word in self.puzzle.domain[slot_id]
-    )
-    neighbor_count = len(self.puzzle.graph[slot_id]["neighbors"])
-    
-    return (consistent_count, neighbor_count)
 
-  # returns the unassigned slot id with minimum priority (consistent_count, neighbor_count)
+  # simple slot selection strategy: select the first unassigned slot.
   def select_unassigned_slot(self, assignment):
-    unassigned = [
-      slot_id for slot_id in self.puzzle.slots
-      if slot_id not in assignment
-    ]
+    for slot_id in self.puzzle.slots:
+      if slot_id not in assignment:
+        return slot_id
 
-    return min(unassigned, key = lambda slot_id: self.slot_priority(slot_id, assignment))
-
-  def has_available_candidate(self, slot_id, assignment):
-    return any(
-      self.is_consistent(slot_id, word, assignment)
-      for word in self.puzzle.domain[slot_id]
-    )
-
-  def search(self, assignment):
-        if len(assignment) == len(self.puzzle.slots):
-          return True
+    return None
   
-        slot_id = self.select_unassigned_slot(assignment)
-  
-        # keeps trying words for the current slot until a consistent assignment is found
-        for word, _ in self.rank_candidates(slot_id):
-          if not self.is_consistent(slot_id, word, assignment):
-            continue
-  
-          assignment[slot_id] = word
-  
-          if all(
-            self.has_available_candidate(other_id, assignment)
-            for other_id in self.puzzle.slots
-            if other_id not in assignment
-          ) and self.search(assignment):
-            return True
-  
-          del assignment[slot_id]
-        
-        return False
-
-  # Solve the crossword with Node2Vec-ranked candidates and backtracking.
-  def solve(self):
-    assignment = {}
-
-    if not self.search(assignment):
-      raise ValueError("No complete crossword solution exists for this word bank.")
-
-    return assignment
 
   # this will apply the solution to the crossword grid for ease of readability
   def apply_solution_to_grid(self, solution):
