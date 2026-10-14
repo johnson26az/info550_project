@@ -4,21 +4,21 @@ crossword = {
     "size" : (15, 15),
 
     "grid": [
-        "DUMAS###HAT#HAM",
-        "ANIMUS#PALOMINO",
-        "MINIMA#UNLEADED",
-        "#PUN#GANG##DIME",
-        "VOTER#SKATE#NIL",
-        "ALE#ASP#RAY#GAS",
-        "TALENTED#MET###",
-        "#RYE#ANIMA#ALP#",
-        "###LOT#POLYMERS",
-        "IMP#PER#LEA#COT",
-        "NOR#TRACE#PATTY",
-        "TREE##TOSS#SUE#",
-        "ATTRACTS#ASTRAL",
-        "CATAPULT#CHEESE",
-        "TRY#TEE###ERRED"
+        "     ###   #   ",
+        "      #        ",
+        "      #        ",
+        "#   #    ##    ",
+        "     #     #   ",
+        "   #   #   #   ",
+        "        #   ###",
+        "#   #     #   #",
+        "###   #        ",
+        "   #   #   #   ",
+        "   #     #     ",
+        "    ##    #   #",
+        "        #      ",
+        "        #      ",
+        "   #   ###     "
     ],
 
     "clues": {
@@ -125,5 +125,23 @@ crossword = {
         "ALL","OP","APT","SAG","STATER","CUE","SAC","TOE",
         "EYE","YAP","SHE","MAD","TAM","ASTER","HIDING",
         "PROTEASE","STY","LED", "LECTURER", "ANEMIA", "MODELS"
+    ],
+
+    "solution_grid": [
+        "DUMAS###HAT#HAM",
+        "ANIMUS#PALOMINO",
+        "MINIMA#UNLEADED",
+        "#PUN#GANG##DIME",
+        "VOTER#SKATE#NIL",
+        "ALE#ASP#RAY#GAS",
+        "TALENTED#MET###",
+        "#RYE#ANIMA#ALP#",
+        "###LOT#POLYMERS",
+        "IMP#PER#LEA#COT",
+        "NOR#TRACE#PATTY",
+        "TREE##TOSS#SUE#",
+        "ATTRACTS#ASTRAL",
+        "CATAPULT#CHEESE",
+        "TRY#TEE###ERRED"
     ]
 }

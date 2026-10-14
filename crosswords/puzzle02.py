@@ -17,15 +17,15 @@ crossword = {
     "size": (10, 10),
 
     "grid": [
-        "BALL#BALL#",
-        "AREA#AREA#",
-        "LEAD#LEAD#",
-        "LADY#LADY#",
+        "    #    #",
+        "    #    #",
+        "    #    #",
+        "    #    #",
         "##########",
-        "BALL#BALL#",
-        "AREA#AREA#",
-        "LEAD#LEAD#",
-        "LADY#LADY#",
+        "    #    #",
+        "    #    #",
+        "    #    #",
+        "    #    #",
         "##########"
     ],
 
@@ -88,5 +88,18 @@ crossword = {
         "EVER", "FACE", "FACT", "FAIL", "FAIR",
         "FALL", "FARM", "FAST", "FEAR", "FEEL",
         "FILE", "FILL", "FIRE", "FISH", "FILM"
+    ],
+
+    "solution_grid": [
+        "BALL#BALL#",
+        "AREA#AREA#",
+        "LEAD#LEAD#",
+        "LADY#LADY#",
+        "##########",
+        "BALL#BALL#",
+        "AREA#AREA#",
+        "LEAD#LEAD#",
+        "LADY#LADY#",
+        "##########"
     ]
 }

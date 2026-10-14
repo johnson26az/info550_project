@@ -14,5 +14,48 @@ algorithm and one player uses another. If your problem is snake, you might show 
 (whichever comes first).
 '''
 
-demoGame = prb.Game(prb.TicTacToe(),alg.RandomAgent(),alg.RandomAgent())
-demoGame.playGame()
+#demoGame = prb.Game(prb.TicTacToe(),alg.RandomAgent(),alg.RandomAgent())
+#demoGame.playGame()
+
+#######################################################################
+# Addition to the template for INFO 450/550.
+# demo.py
+#######################################################################
+
+from crosswords.puzzle02 import crossword as crossword02
+from crosswords.puzzle03 import crossword as crossword03
+
+from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
+
+from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent
+
+CORRECT_SOLUTION = [list(row) for row in crossword03["solution_grid"]]
+
+cw = Crossword(
+      grid = normalize_grid(crossword03["grid"]), # loads the grid
+      clues = crossword03["clues"], # loads the clues
+      word_bank = crossword03["word_bank"]
+   )
+
+cw.print_grid()
+#cw.print_clues()
+
+# making a graph representation of the crossword puzzle
+puzzle = CrosswordPuzzle(cw)
+puzzle.build_graph()
+#puzzle.print_graph()
+
+agent = Node2VecAgent(puzzle)
+
+MAX_ATTEMPTS = 10
+
+print(f"Running {agent.__str__()}...")
+game = PuzzleGame(puzzle, agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
+game.solve_the_puzzle()
+
+# running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
+agent2 = Node2VecBacktrackingWithForwardCheckingAgent(puzzle)
+print(f"Running {agent2.__str__()}...")
+game2 = PuzzleGame(puzzle, agent2, MAX_ATTEMPTS, CORRECT_SOLUTION)
+game2.solve_the_puzzle()
+

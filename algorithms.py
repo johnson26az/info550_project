@@ -26,6 +26,79 @@ def cosine_similarity(vec1, vec2):
   
   return cosine_similarity
 
+
+# backtracking algorithm per figure 6.5 in the textbook (page 215).
+# will extend the node2vec agent later.
+def backtracking_search(agent, assignment):
+  if len(assignment) == len(agent.puzzle.slots):
+    return assignment
+
+  slot_id = agent.select_unassigned_variable(assignment)
+
+  for word in agent.order_domain_values(slot_id):
+    if agent.is_consistent(slot_id, word, assignment):
+      assignment[slot_id] = word
+      
+      result = backtracking_search(agent, assignment)
+      
+      if result is not None:
+        return result
+
+      del assignment[slot_id]
+
+  return None
+
+
+# returns true if the no domain wipeout occurs for any
+# unassigned variable after assigning the word to the slot.
+def forward_checking(puzzle, slot_id, word, assignment, domains):
+  intersections = puzzle.graph[slot_id]["intersections"]
+
+  for neighbor_id, (index_self, index_neighbor) in intersections.items():
+    if neighbor_id not in assignment:
+      new_domain = []
+
+      for candidate in domains[neighbor_id]:
+        if candidate[index_neighbor] == word[index_self]:
+          new_domain.append(candidate)
+
+      domains[neighbor_id] = new_domain
+
+      if len(new_domain) == 0:
+        return False
+
+  return True
+
+
+# backtracking with forward checking
+def backtracking_search_with_forward_checking(agent, assignment, domains):
+  if agent.is_complete(assignment):
+    return assignment
+
+  slot_id = agent.select_unassigned_variable(assignment)
+
+  for word in agent.order_domain_values(slot_id):
+    if agent.is_consistent(slot_id, word, assignment):
+      assignment[slot_id] = word
+      saved_domains = {
+        slot_id: list(values)
+        for slot_id, values in domains.items()
+      }
+
+      if forward_checking(agent.puzzle, slot_id, word, assignment, domains):
+        result = backtracking_search_with_forward_checking(agent, assignment, domains)
+        
+        if result is not None:
+          return result
+
+      del assignment[slot_id]
+
+      domains.clear()
+      domains.update(saved_domains)
+
+  return None
+
+
 '''
 resources for understanding and using the Node2Vec. 
   https://www.geeksforgeeks.org/machine-learning/node2vec-algorithm/
@@ -34,7 +107,7 @@ resources for understanding and using the Node2Vec.
 this will be the agent solving the crossword puzzle. it uses the word bank to generate embeddings for each word and
 then leverages these embeddings to make informed decisions about word placement.
 
-refactor the node2vec agent to be simple and act like a greedy agent. it does not utilize backtracking or any other search strategy.
+refactored the node2vec agent to be simple and act like a greedy agent. it does not utilize backtracking or any other search strategy.
 it simply selects the next unassigned slot and ranks the candidate words based on their embeddings.
 it then selects the highest-ranked word that is consistent with the current assignment.
 '''
@@ -67,8 +140,7 @@ class Node2VecAgent:
       if self._is_consistent(slot_id, word, problem.assignment):
         return (slot_id, word)
 
-    # no consistent found
-    return None
+    return None # no consistent found
 
 
   # train the Node2Vec embeddings
@@ -137,3 +209,66 @@ class Node2VecAgent:
       
       for (row, col), letter in zip(cells, word):
         cw.set_cell_letter(row, col, letter)
+
+
+# a node2vec agent with CSP structure.
+# this will be extended to include for adding CSP algorithms.
+class Node2VecCSPAgent(Node2VecAgent):
+  def is_complete(self, assignment):
+    return len(assignment) == len(self.puzzle.slots)
+
+  def is_consistent(self, slot_id, word, assignment):
+    return super()._is_consistent(slot_id, word, assignment)
+
+  def order_domain_values(self, slot_id):
+    return [word for word, _ in self._rank_candidates(slot_id)]
+
+  def select_unassigned_variable(self, assignment):
+    return super().select_unassigned_slot(assignment)
+
+
+# extention of the Node2VecAgent with backtracking search and forward checking to find a solution to the crossword puzzle.
+class Node2VecBacktrackingWithForwardCheckingAgent(Node2VecCSPAgent):
+  def __str__(self):
+    return "Node2Vec Backtracking with Forward Checking Agent"
+
+  def __init__(self, puzzle):
+    super().__init__(puzzle)
+    self.solution = None
+  
+  def solve(self):
+    if not hasattr(self.puzzle, "G"):
+      self.puzzle.build_graph()
+
+    if self.model is None:
+      self._train_embedding()
+
+    assignment = {}
+    domains = {slot_id: list(self.puzzle.domain[slot_id]) for slot_id in self.puzzle.slots}
+    
+    solution = backtracking_search_with_forward_checking(self, assignment, domains)
+    
+    if solution is not None:
+      self.apply_solution_to_grid(solution)
+    
+    return solution
+
+  # implementing the get_move method to return the next move based
+  # on the solution found by the backtracking search with forward checking.
+  # this should remain compatible to the original get_move method in the Node2VecAgent class.
+  def get_move(self, problem):
+    # finiding the solution once and storing it for future moves.
+    if self.solution is None:
+      print("Computing CSP solution using backtracking with forward checking...")
+      self.solution = self.solve()
+
+    # no solution found, return None
+    if self.solution is None:
+      return None
+
+    # return the next unassigned slot
+    for slot_id, word in self.solution.items():
+      if slot_id not in problem.assignment:
+        return (slot_id, word)
+
+    return None

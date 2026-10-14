@@ -5,6 +5,8 @@ This file will contain your the code for your problems.
 import numpy as np
 import cv2
 
+from algorithms import Node2VecAgent
+
 class Game:
     def __init__(self, problem, pZero, pOne,verbose=True):
       self.problem = problem      
@@ -357,15 +359,57 @@ class CrosswordPuzzle:
 
       self.G = G
 
+   # check if the current assignment matches the correct solution
+   def match_solution_grid(self, correct_solution):
+      for r in range(self.crossword.rows):
+         for c in range(self.crossword.cols):
+            if self.crossword.grid[r][c] != correct_solution[r][c]:
+               return False
+      return True
+
 
 class PuzzleGame:
-   def __init__(self, problem, agent):
-      self.problem = problem
+   def __init__(self, puzzle, agent, max_attempts, correct_solution):
+      self.problem = puzzle
       self.agent = agent
+      self.max_attempts = max_attempts
+      self.correct_solution = correct_solution
 
+   def solve_the_puzzle(self):
+      attempts = 0
 
+      while attempts < self.max_attempts:
+         self.problem.assignment = {}  # reset the assignment for each attempt
+         agent = self.agent
 
+         # the agent solving the crossword puzzle
+         while len(self.problem.assignment) < len(self.problem.slots):
+            move = agent.get_move(self.problem)
+         
+            if move is None:
+               print("No more moves available.")
+               break
 
+            slot_id, word = move
+            self.problem.assignment[slot_id] = word
+
+         solution = self.problem.assignment
+         agent.apply_solution_to_grid(solution)
+
+         # checking the solution against the correct solution
+         if self.problem.match_solution_grid(self.correct_solution):
+            print("\nAGENT FOUND A CORRECT SOLUTION!")
+            print(f"Solution after {attempts + 1} attempts:")
+            self.problem.crossword.print_grid()
+            break
+         else:
+            print(f"\nAttempt {attempts + 1}: AGENT DID NOT FIND A CORRECT SOLUTION.")
+            attempts += 1
+            print(f"current attempts: {attempts}")
+
+      if attempts == self.max_attempts:
+         print(agent.__str__())
+         print("\nAGENT FAILED TO FIND A CORRECT SOLUTION AFTER MAX ATTEMPTS.")
 
 
 import csv
@@ -471,44 +515,6 @@ def main():
    csp = spec.build_csp()
    print(csp)
    '''
-
-   from crosswords.puzzle01 import crossword as crossword01
-   from crosswords.puzzle02 import crossword as crossword02
-   from crosswords.puzzle03 import crossword as crossword03
-   from algorithms import Node2VecAgent
-
-   cw = Crossword(
-      grid = normalize_grid(crossword03["grid"]), # clear and loads the grid
-      clues = crossword03["clues"], # loads the clues
-      word_bank = crossword03["word_bank"]
-   )
-
-   cw.print_grid()
-   #cw.print_clues()
-
-   # making a graph representation of the crossword puzzle
-   puzzle = CrosswordPuzzle(cw)
-   puzzle.build_graph()
-   #puzzle.print_graph()
-
-   agent = Node2VecAgent(puzzle)
-
-   # the agent solving the crossword puzzle
-   while len(puzzle.assignment) < len(puzzle.slots):
-      move = agent.get_move(puzzle)
-      
-      if move is None:
-         print("No more moves available.")
-         break
-
-      slot_id, word = move
-      puzzle.assignment[slot_id] = word
-   
-   solution = puzzle.assignment
-   agent.apply_solution_to_grid(solution)
-
-   print("\nAGENT APPLIED SOLUTION TO GRID")
-   puzzle.crossword.print_grid()
    
 
 if __name__ == "__main__":
