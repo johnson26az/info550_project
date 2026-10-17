@@ -24,3 +24,8 @@ if 0 in compsToRun:
       
   print(f"P0 Wins: {winsZero}\nP1 Wins: {winsOne}\nDraws: {draws}")  
   
+#######################################################################
+# Addition to the template for INFO 450/550.
+# comparisons.py
+#######################################################################
+

@@ -27,7 +27,7 @@ from crosswords.puzzle03 import crossword as crossword03
 
 from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
 
-from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent
+from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent, Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent
 
 CORRECT_SOLUTION = [list(row) for row in crossword03["solution_grid"]]
 
@@ -51,11 +51,16 @@ MAX_ATTEMPTS = 10
 
 print(f"Running {agent.__str__()}...")
 game = PuzzleGame(puzzle, agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
-game.solve_the_puzzle()
+#game.solve_the_puzzle()
 
 # running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
 agent2 = Node2VecBacktrackingWithForwardCheckingAgent(puzzle)
 print(f"Running {agent2.__str__()}...")
 game2 = PuzzleGame(puzzle, agent2, MAX_ATTEMPTS, CORRECT_SOLUTION)
-game2.solve_the_puzzle()
+#game2.solve_the_puzzle()
 
+# running the Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent on the same puzzle
+agent3 = Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(puzzle)
+print(f"Running {agent3.__str__()}...")
+game3 = PuzzleGame(puzzle, agent3, MAX_ATTEMPTS, CORRECT_SOLUTION)
+game3.solve_the_puzzle()

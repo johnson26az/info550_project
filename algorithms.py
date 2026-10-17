@@ -180,6 +180,7 @@ class Node2VecAgent:
 
   # checking for consistency for the already assigned words.
   # this will ensure that the word fits all the intersections with already assigned words.
+  # this is the consistency check for the CSP problem.
   def _is_consistent(self, slot_id, word, assignment):
     # intesections are neighbor_slot_id -> (index_self, index_neighbor)
     for neighbor_id, (index_self, index_neighbor) in self.puzzle.graph[slot_id]["intersections"].items():
@@ -270,5 +271,59 @@ class Node2VecBacktrackingWithForwardCheckingAgent(Node2VecCSPAgent):
     for slot_id, word in self.solution.items():
       if slot_id not in problem.assignment:
         return (slot_id, word)
+
+    return None
+
+
+class Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(Node2VecCSPAgent):
+  def __str__(self):
+    return "Node2Vec Conflict-Directed Backjumping with No-Good Learning Agent"
+
+  def __init__(self, puzzle):
+    super().__init__(puzzle)
+    self.solution = None
+    self.no_goods = set()  # Store no-goods as frozensets for immutability
+
+  def solve(self):
+    if not hasattr(self.puzzle, "G"):
+      self.puzzle.build_graph()
+
+    if self.model is None:
+      self._train_embedding()
+
+    assignment = {}
+    domains = {slot_id: list(self.puzzle.domain[slot_id]) for slot_id in self.puzzle.slots}
+    
+    solution = self.conflict_directed_backjumping(assignment, domains)
+    
+    if solution is not None:
+      self.apply_solution_to_grid(solution)
+    
+    return solution
+
+  def conflict_directed_backjumping(self, assignment, domains):
+    if self.is_complete(assignment):
+      return assignment
+
+    slot_id = self.select_unassigned_variable(assignment)
+
+    for word in self.order_domain_values(slot_id):
+      if self.is_consistent(slot_id, word, assignment):
+        assignment[slot_id] = word
+        saved_domains = {slot_id: list(values) for slot_id, values in domains.items()}
+
+        if forward_checking(self.puzzle, slot_id, word, assignment, domains):
+          result = self.conflict_directed_backjumping(assignment, domains)
+          
+          if result is not None:
+            return result
+
+        del assignment[slot_id]
+        domains.clear()
+        domains.update(saved_domains)
+
+      # If the current assignment leads to a conflict, record the no-good
+      no_good = frozenset(assignment.items())
+      self.no_goods.add(no_good)
 
     return None
