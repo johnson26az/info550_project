@@ -227,6 +227,17 @@ class Node2VecCSPAgent(Node2VecAgent):
   def select_unassigned_variable(self, assignment):
     return super().select_unassigned_slot(assignment)
 
+  # modified function for solving the specification decomposition problem. this will be used for the requirements decomposition problem.
+  # this gives an MRV heuristics directly on requirements
+  def select_unassigned_variable_req(self, assignment, domains):
+    unassigned = [
+      req_id
+      for req_id in self.spec.requirements
+      if req_id not in assignment
+    ]
+
+    return min(unassigned, key=lambda req_id: len(domains[req_id]))
+
 
 # extention of the Node2VecAgent with backtracking search and forward checking to find a solution to the crossword puzzle.
 class Node2VecBacktrackingWithForwardCheckingAgent(Node2VecCSPAgent):
@@ -476,3 +487,238 @@ class Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(Node2VecCSPAgen
         self.no_goods_learned += 1
 
     return None, set(self.conflict_sets[slot_id])
+
+
+
+
+# node2vec agent for requirements problem
+class Node2VecRequirementCSPAgent:
+  def __str__(self):
+    return "Node2Vec Requirement CSP Agent"
+
+  def __init__(self, specification):
+    self.spec = specification
+    self.model = None
+    self.csp = specification.build_csp()
+
+  def _train_embedding(self):
+    if self.spec.G.number_of_nodes() == 0:
+      self.spec.build_graph()
+
+    node2vec = Node2Vec(
+      self.spec.G,
+      dimensions = 128,
+      walk_length = 80,
+      num_walks = 10,
+      p = 1.0,
+      q = 1.0,
+      workers = 4,
+    )
+
+    self.model = node2vec.fit(window=10, min_count=1)
+
+  def is_complete(self, assignment):
+    return len(assignment) == len(self.csp["variables"])
+
+  def score_parent(self, req_id, parent_id):
+    return self.model.wv.similarity(str(req_id), str(parent_id))
+
+  def order_domain_values(self, req_id, domains):
+    ranked = []
+
+    for parent_id in domains[req_id]:
+      if parent_id is None:
+        ranked.append((None, -1))
+        continue
+
+      score = self.score_parent(req_id, parent_id)
+      ranked.append((parent_id, score))
+
+    ranked.sort(key=lambda x: x[1], reverse=True)
+      
+    return [parent_id for parent_id, _ in ranked]
+
+
+  # selects the next unassigned variable based on MRV heuristic
+  def select_unassigned_variable(self, assignment, domains):
+    unassigned = [
+      req_id
+      for req_id in self.csp["variables"]
+      if req_id not in assignment
+    ]
+
+    return min(unassigned, key=lambda req_id: len(domains[req_id]))
+
+
+  # checks if adding the parent_id to the assignment for req_id would create a cycle in the assignment graph
+  def creates_cycle(self, req_id, parent_id, assignment):
+    current = parent_id
+
+    while current is not None:
+      if current == req_id:
+        return True
+      
+      current = assignment.get(current)
+
+    return False
+
+
+  # checks if the assignment is consistent with the current req_id and parent_id, considering the no-goods learned so far.
+  def is_consistent(self, req_id, parent_id, assignment):
+    if parent_id is None:
+      return True
+
+    if req_id == parent_id:
+      return False
+
+    if self.creates_cycle(req_id, parent_id, assignment):
+      return False
+
+    child = self.spec.get_requirement(req_id)
+    parent = self.spec.get_requirement(parent_id)
+
+    if child.req_level == "Subsystem":
+      if parent.req_level != "System":
+        return False
+      elif child.req_level == "Component":
+        if parent.req_level not in ["System", "Subsystem"]:
+          return False
+      elif child.req_level == "Non-Functional":
+        if parent.req_level not in ["System", "Subsystem", "Component"]:
+          return False
+
+    return True
+
+
+  # applies the assignment of parent-child relationships to the specification requirements
+  def apply_decomposition(self, assignment):
+    # clear the existing parent-child relationships
+    for req in self.spec.requirements.values():
+      req.parent = None
+      req.children = []
+
+    # build new hierarchy based on the assignment
+    for req_id, parent_id in assignment.items():
+
+      if parent_id is None:
+        continue
+
+      child = self.spec.get_requirement(req_id)
+      parent = self.spec.get_requirement(parent_id)
+
+      child.add_parent(parent)
+
+
+  def print_solution(self, assignment):
+    print("\nRequirement Decomposition Solution:\n")
+
+    for req_id, parent_id in assignment.items():
+      req = self.spec.get_requirement(req_id)
+
+      if parent_id is None:
+        print(
+          f"{req.req_id} "
+          f"({req.req_level}) "
+          f"-> ROOT"
+        )
+      else:
+        parent = self.spec.get_requirement(parent_id)
+        print(
+          f"{req.req_id} "
+          f"({req.req_level}) "
+          f"-> "
+          f"{parent.req_id} "
+          f"({parent.req_level})"
+        )
+
+
+# agent for requirements decomposition problem. this will be used to solve the requirements decomposition problem using the node2vec embeddings
+# this agent will use only the bactracking with forward checking functions
+class Node2VecRequirementsDecompositionAgent(Node2VecRequirementCSPAgent):
+  def __str__(self):
+    return "Node2Vec Requirements Decomposition Agent using Backtracking with Forward Checking"
+
+  def __init__(self, specification):
+    super().__init__(specification)
+    self.solution = None
+
+
+  # forward checking for the requirements decomposition problem
+  # since the consistency checker already identifies the cycles, we can 
+  # prune any domain value that would create one
+  def requirements_forward_checking(self, req_id, parent_id, assignment, domains):
+    if parent_id is None:
+      return True
+
+    for variable in domains:
+      if variable in assignment:
+        continue
+
+      new_domain = []
+
+      for candidate_parent in domains[variable]:
+        if candidate_parent is None:
+          new_domain.append(candidate_parent)
+          continue
+
+        test_assignment = assignment.copy()
+        test_assignment[variable] = (candidate_parent)
+
+        if self.is_consistent(variable, candidate_parent, test_assignment):
+          new_domain.append(candidate_parent)
+
+      domains[variable] = new_domain
+
+      if len(new_domain) == 0:
+        return False
+    
+    return True
+
+
+  def requirement_backtracking_with_forward_checking(self, assignment, domains):
+    if self.is_complete(assignment):
+      return assignment
+
+    req_id = self.select_unassigned_variable(assignment, domains)
+
+    for parent_id in self.order_domain_values(req_id, domains):
+      if self.is_consistent(req_id, parent_id, assignment):
+        assignment[req_id] = parent_id
+        saved_domains = {
+          var: list(values)
+          for var, values in domains.items()
+        }
+
+        if self.requirements_forward_checking(req_id, parent_id, assignment, domains):
+          result = self.requirement_backtracking_with_forward_checking(assignment, domains)
+
+          if result is not None:
+            return result
+
+        del assignment[req_id]
+
+        domains.clear()
+        domains.update(saved_domains)
+
+    return None
+
+
+  # solves the requirements decomposition problem using backtracking with forward checking. this will return a valid assignment of parent-child relationships for the requirements.
+  def solve(self):
+    if self.model is None:
+      self._train_embedding()
+
+    assignment = {}
+
+    domains = {
+      var: list(values)
+      for var, values in self.csp["domains"].items()
+    }
+
+    solution = self.requirement_backtracking_with_forward_checking(assignment, domains)
+    self.solution = solution
+
+    if solution:
+      self.apply_decomposition(solution)
+
+    return solution

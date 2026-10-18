@@ -30,9 +30,15 @@ from crosswords.puzzle03 import crossword as crossword03
 from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
 
 from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent, Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent
+from algorithms import Node2VecRequirementsDecompositionAgent
+
+from problems import Specification
+
+from pathlib import Path
+
 
 CORRECT_SOLUTION = [list(row) for row in crossword03["solution_grid"]]
-
+'''
 cw = Crossword(
       grid = normalize_grid(crossword03["grid"]), # loads the grid
       clues = crossword03["clues"], # loads the clues
@@ -92,3 +98,28 @@ finally:
     elapsed_seconds = time.perf_counter() - start_time
     print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
     print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes")
+'''
+
+# for requirements problem
+# getting the input file path
+input_file_name = 'requirements_only.csv'
+input_file = Path(__file__).parent / "data" / input_file_name
+
+# try to see if the input file exists
+if not input_file.exists():
+  raise FileNotFoundError(f"Input file not found: {input_file}")
+
+# establishing the specification and loading the requirements
+spec = Specification()
+spec.load_req(input_file)
+# debug - check if the requirements were loaded correctly
+print(f"Loaded {len(spec.requirements)} requirements")
+
+spec.build_graph()
+#spec.print_graph()
+
+# creating the agent
+agentReq0 = Node2VecRequirementsDecompositionAgent(spec)
+solution = agentReq0.solve()
+agentReq0.print_solution(solution)
+

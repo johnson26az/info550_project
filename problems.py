@@ -413,39 +413,62 @@ class PuzzleGame:
 
 
 import csv
-from pathlib import Path
-
+import re
 
 '''
 Defines the properties of a requirement
 '''
 class Requirement:
-   def __init__(self, req_id, req_title, req_text):
+   def __init__(self, req_id, req_title, req_text, req_level=None):
       self.req_id = req_id
       self.req_title = req_title
       self.req_text = req_text
+      self.req_level = req_level  # this will be set when building the decomposition tree
 
       # structure for the relationships
-      self.parent = None
+      self.parent = None  # this will hold the parent requirement
+      self.children = []
 
-      # variables for CSP formalization
-      self.variables = set()
-      self.domain = {}
+      # requirement-specific constraints for the CSP
       self.constraints = []
 
-   def add_req_text(self, req_text):
-      self.req_text = req_text
 
    def add_parent(self, parent):
-      self.parent.append(parent)
+      if parent and self.parent is None:
+         self.parent = parent
+         parent.add_child(self)  # ensure the parent also knows about this child
 
-   def add_variable(self, variable, domain):
-      self.variables.add(variable)
-      self.domain[variable] = domain
+
+   def add_child(self, child):
+      if child not in self.children:
+         self.children.append(child)
+
 
    def add_constraint(self, variables, func):
       self.constraints.append((variables, func))
 
+   def infer_level(self):
+      req_id = self.req_id.upper()
+
+      if req_id.startswith("SY"):
+         self.req_level = "System"
+      elif req_id.startswith("FE"):
+         self.req_level = "Subsystem"
+      elif req_id.startswith("BE"):
+         self.req_level = "Subsystem"
+      elif req_id.startswith("SW"):
+         self.req_level = "Component"
+      elif req_id.startswith("NF"):
+         self.req_level = "Non-Functional"
+
+      return self.req_level
+
+
+STOP_WORDS = {
+   "a", "an", "the", "shall",  "must", "should", "and", "or", "but", "is",
+   "will", "system", "be", "to", "of", "in", "on", "for", "with", "by", "as",
+   "are", "by"
+}
 
 '''
 Defines a set of requirements contained in a specification
@@ -453,6 +476,7 @@ Defines a set of requirements contained in a specification
 class Specification:
    def __init__(self):
       self.requirements = {}
+      self.G = nx.Graph()  # graph structure for the requirements
 
    def add_requirement(self, req):
       self.requirements[req.req_id] = req
@@ -464,18 +488,17 @@ class Specification:
    Builds the CSP (Constraint Satisfaction Problem) from the requirements.
    '''
    def build_csp(self):
-      variables = set()
-      domain = {}
+      variables = self.create_decomposition_variables()
+      domains = self.build_domains()
+
       constraints = []
       
       for req in self.requirements.values():
-         variables |= req.variables
-         domain.update(req.domain)
          constraints.extend(req.constraints)
 
       return {
-         "variables": list(variables),
-         "domain": domain,
+         "variables": variables,
+         "domains": domains,
          "constraints": constraints
       }
 
@@ -483,39 +506,126 @@ class Specification:
    Loads the requirements from a CSV file.
    '''
    def load_req(self, file_path):
-    with open(file_path, newline="", encoding="cp1252") as csvfile:  # the csv file is written in cp1252 encoding
-        reader = csv.DictReader(csvfile)
+      with open(file_path, newline="", encoding="cp1252") as csvfile:  # the csv file is written in cp1252 encoding
+         reader = csv.DictReader(csvfile)
 
-        for index, row in enumerate(reader, start=1):
+         for row in reader:
             req = Requirement(
-                req_id = index,
-                req_title = row["Title"],
-                req_text = row["Requirement Text"],
+                req_id = row["Requirements ID"].strip(),
+                req_title = row["Title"].strip(),
+                req_text = row["Requirement Text"].strip(),
             )
+            req.infer_level()
+
             self.add_requirement(req)
 
 
-def main():
-   '''
-   # getting the input file path
-   input_file_name = 'requirements_only.csv'
-   input_file = Path(__file__).parent / "data" / input_file_name
+   def create_decomposition_variables(self):
+      variables = []
 
-   # try to see if the input file exists
-   if not input_file.exists():
-      raise FileNotFoundError(f"Input file not found: {input_file}")
+      for req in self.requirements.values():
+         variables.append(req.req_id)
 
-   # establishing the specification and loading the requirements
-   spec = Specification()
-   spec.load_req(input_file)
+      return variables
 
-   # debug - check if the requirements were loaded correctly
-   print(f"Loaded {len(spec.requirements)} requirements")
+   # making the domain self aware of the requrements and the levels of the requirements
+   # this will help in building the CSP and the graph structure for the requirements.
+   def build_domains(self):
+      domains = {}
 
-   csp = spec.build_csp()
-   print(csp)
-   '''
-   
+      for req in self.requirements.values():
+         domains[req.req_id] = self.get_parent_candidates(req)
 
-if __name__ == "__main__":
-   main()
+      return domains
+
+
+   def get_requirement_by_level(self, level):
+      return [
+         req
+         for req in self.requirements.values()
+         if req.req_level == level
+      ]
+
+
+   def get_parent_candidates(self, req_id):
+      req = self.requirements.get(req_id)
+      if not req:
+         return []
+
+      if req.req_level == "System":
+         return [None]
+      elif req.req_level == "Subsystem":
+         return [
+            other.req_id
+            for other in self.requirements.values()
+            if other.req_level == "System"
+         ]
+      elif req.req_level == "Component":
+         return [
+            other.req_id
+            for other in self.requirements.values()
+            if other.req_level == "Subsystem"
+         ]
+      elif req.req_level == "Non-Functional":
+         return [
+            other.req_id
+            for other in self.requirements.values()
+            if other.req_level in ["System", "Subsystem", "Component"]
+         ]
+
+
+   # tokenizes the text of a requirement into a set of unique words.
+   def tokenize_text(self, text):
+      words = re.findall(r'\b\w+\b', text.lower())
+      return {
+         word
+         for word in words
+         if (word not in STOP_WORDS and len(word) > 2)
+      }
+
+
+   # builds the graph structure for the requirements, which can be used for visualization or analysis
+   def build_graph(self):
+      self.G.clear()
+      reqs = list(self.requirements.values())
+
+      # for adding nodes to the graph
+      for req in reqs:
+         self.G.add_node(
+            req.req_id,
+            title=req.req_title,
+            text = req.req_text,
+            level = req.req_level
+         )
+
+      # for adding edges to the graph
+      for i in range(len(reqs)):
+         for j in range(i + 1, len(reqs)):
+            req1 = reqs[i]
+            req2 = reqs[j]
+
+            # check if they share any words
+            words1 = self.tokenize_text(req1.req_text)
+            words2 = self.tokenize_text(req2.req_text)
+
+            overlap = words1 & words2
+
+            if overlap:
+               self.G.add_edge(
+                  req1.req_id,
+                  req2.req_id,
+                  weight=len(overlap)
+               )
+
+
+   # debug function to print the graph structure
+   def print_graph(self):
+      print("\nREQUIREMENTS GRAPH STRUCTURE\n")
+
+      print("\nNodes:")
+      for node in self.G.nodes():
+         print(node)
+
+      print("\nEdges:")
+      for u, v, data in self.G.edges(data=True):
+         print(f"{u} -- {v}, weight: {data['weight']}")
