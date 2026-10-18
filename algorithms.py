@@ -275,16 +275,34 @@ class Node2VecBacktrackingWithForwardCheckingAgent(Node2VecCSPAgent):
     return None
 
 
+# a node2vec agent with conflict-directed backjumping and no-good learning.
 class Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(Node2VecCSPAgent):
   def __str__(self):
     return "Node2Vec Conflict-Directed Backjumping with No-Good Learning Agent"
 
+
   def __init__(self, puzzle):
     super().__init__(puzzle)
     self.solution = None
+    self.score_cache = {}
     self.no_goods = set()  # Store no-goods as frozensets for immutability
+    self.conflict_sets = { # store conflicts for each slot
+      slot_id: set() for slot_id in self.puzzle.slots
+    }
+    # adding statistics for comparison and analysis
+    self.no_good_hits = 0
+    self.no_goods_learned = 0
+    self.score_cache = {}
+
 
   def solve(self):
+    # reseting the no-goods and conflict sets for a fresh run
+    self.solution = None
+    self.no_goods.clear()
+    self.conflict_sets = {slot_id: set() for slot_id in self.puzzle.slots}
+    self.no_good_hits = 0
+    self.no_goods_learned = 0
+
     if not hasattr(self.puzzle, "G"):
       self.puzzle.build_graph()
 
@@ -293,37 +311,168 @@ class Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(Node2VecCSPAgen
 
     assignment = {}
     domains = {slot_id: list(self.puzzle.domain[slot_id]) for slot_id in self.puzzle.slots}
+    self.score_cache = {
+      (slot_id, word): self._score_word(slot_id, word)
+      for slot_id, candidates in domains.items()
+      for word in candidates
+    }
     
-    solution = self.conflict_directed_backjumping(assignment, domains)
+    solution, _ = self.conflict_directed_backjumping(assignment, domains)
     
     if solution is not None:
       self.apply_solution_to_grid(solution)
     
     return solution
 
-  def conflict_directed_backjumping(self, assignment, domains):
-    if self.is_complete(assignment):
-      return assignment
 
-    slot_id = self.select_unassigned_variable(assignment)
+  def get_move(self, problem):
+    # Compute the complete CSP solution once, then expose it one assignment
+    # at a time through the PuzzleGame interface.
+    if self.solution is None:
+      print("Computing CSP solution using conflict-directed backjumping with no-good learning...")
+      self.solution = self.solve()
 
-    for word in self.order_domain_values(slot_id):
-      if self.is_consistent(slot_id, word, assignment):
-        assignment[slot_id] = word
-        saved_domains = {slot_id: list(values) for slot_id, values in domains.items()}
+    if self.solution is None:
+      return None
 
-        if forward_checking(self.puzzle, slot_id, word, assignment, domains):
-          result = self.conflict_directed_backjumping(assignment, domains)
-          
-          if result is not None:
-            return result
-
-        del assignment[slot_id]
-        domains.clear()
-        domains.update(saved_domains)
-
-      # If the current assignment leads to a conflict, record the no-good
-      no_good = frozenset(assignment.items())
-      self.no_goods.add(no_good)
+    for slot_id, word in self.solution.items():
+      if slot_id not in problem.assignment:
+        return slot_id, word
 
     return None
+
+
+  # Check if the current assignment violates any no-good
+  def violates_no_good(self, assignment):
+    current = frozenset(assignment.items())
+
+    for no_good in self.no_goods:
+      if no_good.issubset(current):
+        self.no_good_hits += 1
+        return True
+
+    return False
+
+
+  # checks if the assignment is consistent with the current slot and word, considering the no-goods learned so far.
+  def consistency_conflict(self, slot_id, word, assignment):
+    conflicts = set()
+
+    for neighbor_id, (index_self, index_neighbor) in self.puzzle.graph[slot_id]["intersections"].items():
+      # if the neighbor is already assigned, check for consistency
+      if neighbor_id not in assignment:
+        continue
+
+      # if the neighbor is assigned, check for consistency
+      if word[index_self] != assignment[neighbor_id][index_neighbor]:
+        conflicts.add(neighbor_id)
+
+    return len(conflicts) == 0, conflicts
+
+
+  def order_domain_values_cbj(self, slot_id, domains):
+    candidates = domains[slot_id]
+
+    scored = [
+      (word, self.score_cache[(slot_id, word)])
+      for word in candidates
+    ]
+    scored.sort(key=lambda item: item[1], reverse=True)
+
+    return [word for word, _ in scored]
+
+
+  def select_unassigned_variable(self, assignment):
+    # Choose the slot with the fewest currently compatible candidates.
+    # This preserves CBJ while avoiding large dead-end subtrees.
+    unassigned = [
+      slot_id
+      for slot_id in self.puzzle.slots
+      if slot_id not in assignment
+    ]
+
+    def remaining_values(slot_id):
+      return sum(
+        self.consistency_conflict(slot_id, word, assignment)[0]
+        for word in self.puzzle.domain[slot_id]
+      )
+
+    return min(unassigned, key=remaining_values)
+
+
+  # implementing conflict-directed backjumping with no-good learning
+  # nogood learning is based on Constraint Porcessing by Rina Dechter, 2003.
+  def conflict_directed_backjumping(self, assignment, domains):
+    # if the assignment is complete, return it
+    if self.is_complete(assignment):
+      return dict(assignment), None
+
+    # select the next unassigned variable
+    slot_id = self.select_unassigned_variable(assignment)
+
+    self.conflict_sets[slot_id] = set()
+
+    # for each value in the domain of the selected variable,
+    # check if it is consistent with the current assignment and does not violate any no-good.
+    # this is important. the no-good learning will help to prune the search space and avoid exploring paths that are known to be inconsistent.
+    for word in self.order_domain_values_cbj(slot_id, domains):
+      consistent, culprits = self.consistency_conflict(slot_id, word, assignment)
+
+      if not consistent:
+        self.conflict_sets[slot_id].update(culprits)
+
+        if any(c in assignment for c in culprits):
+
+          learned_no_good = frozenset(
+            [
+              (var, assignment[var])
+              for var in self.conflict_sets[slot_id]
+              if var in assignment
+            ]
+            + [(slot_id, word)]
+          )
+          if learned_no_good and learned_no_good not in self.no_goods: # store the learned no-good only if it is not empty
+            self.no_goods.add(learned_no_good)
+            self.no_goods_learned += 1
+
+        continue
+
+      assignment[slot_id] = word
+
+      # check for no-good violation
+      if self.violates_no_good(assignment):
+        assignment.pop(slot_id, None)
+        continue
+
+      result, conflict_set = self.conflict_directed_backjumping(assignment, domains)
+
+      if result is not None:
+        return result, None
+
+      if conflict_set is not None:
+
+        if slot_id not in conflict_set:
+          assignment.pop(slot_id, None)
+
+          return None, conflict_set
+
+        conflict_set.discard(slot_id)
+
+        self.conflict_sets[slot_id].update(conflict_set)
+
+      assignment.pop(slot_id, None)
+
+    # if we reach here, it means that we have explored all the values in the domain of the current slot and none of them led to a solution.
+    # we will learn a new no-good based on the conflict set of the current slot and backjump to the most recent variable in the conflict set.
+    learned_no_good = frozenset([
+      (var, assignment[var])
+      for var in self.conflict_sets[slot_id]
+      if var in assignment
+    ])
+
+    if learned_no_good: # store the learned no-good only if it is not empty
+      if learned_no_good not in self.no_goods:
+        self.no_goods.add(learned_no_good)
+        self.no_goods_learned += 1
+
+    return None, set(self.conflict_sets[slot_id])

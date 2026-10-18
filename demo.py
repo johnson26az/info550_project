@@ -1,3 +1,5 @@
+import time
+
 import problems as prb
 import algorithms as alg
 
@@ -51,16 +53,42 @@ MAX_ATTEMPTS = 10
 
 print(f"Running {agent.__str__()}...")
 game = PuzzleGame(puzzle, agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
-#game.solve_the_puzzle()
+game.solve_the_puzzle()
+
+# adding timer for solving the puzzle
+start_time = time.perf_counter()
+try:
+    game.solve_the_puzzle()
+finally:
+    elapsed_seconds = time.perf_counter() - start_time
+    print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
+    print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
 
 # running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
 agent2 = Node2VecBacktrackingWithForwardCheckingAgent(puzzle)
 print(f"Running {agent2.__str__()}...")
 game2 = PuzzleGame(puzzle, agent2, MAX_ATTEMPTS, CORRECT_SOLUTION)
-#game2.solve_the_puzzle()
+game2.solve_the_puzzle()
+
+# adding timer for solving the puzzle
+start_time = time.perf_counter()
+try:
+    game2.solve_the_puzzle()
+finally:
+    elapsed_seconds = time.perf_counter() - start_time
+    print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
+    print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
 
 # running the Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent on the same puzzle
 agent3 = Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(puzzle)
 print(f"Running {agent3.__str__()}...")
 game3 = PuzzleGame(puzzle, agent3, MAX_ATTEMPTS, CORRECT_SOLUTION)
-game3.solve_the_puzzle()
+
+# adding timer for solving the puzzle
+start_time = time.perf_counter()
+try:
+    game3.solve_the_puzzle()
+finally:
+    elapsed_seconds = time.perf_counter() - start_time
+    print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
+    print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes")
