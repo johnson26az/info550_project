@@ -5,8 +5,6 @@ This file will contain your the code for your problems.
 import numpy as np
 import cv2
 
-from algorithms import Node2VecAgent
-
 class Game:
     def __init__(self, problem, pZero, pOne,verbose=True):
       self.problem = problem      
@@ -374,11 +372,13 @@ class PuzzleGame:
       self.agent = agent
       self.max_attempts = max_attempts
       self.correct_solution = correct_solution
+      self.initial_grid = [row[:] for row in puzzle.crossword.grid]
 
    def solve_the_puzzle(self):
       attempts = 0
 
       while attempts < self.max_attempts:
+         self.problem.crossword.grid = [row[:] for row in self.initial_grid]
          self.problem.assignment = {}  # reset the assignment for each attempt
          agent = self.agent
 
@@ -490,7 +490,6 @@ class Specification:
    def build_csp(self):
       variables = self.create_decomposition_variables()
       domains = self.build_domains()
-
       constraints = []
       
       for req in self.requirements.values():
@@ -501,6 +500,7 @@ class Specification:
          "domains": domains,
          "constraints": constraints
       }
+
 
    '''
    Loads the requirements from a CSV file.
@@ -528,6 +528,7 @@ class Specification:
 
       return variables
 
+
    # making the domain self aware of the requrements and the levels of the requirements
    # this will help in building the CSP and the graph structure for the requirements.
    def build_domains(self):
@@ -547,6 +548,7 @@ class Specification:
       ]
 
 
+   # Returns a list of candidate parent requirements for a given requirement.
    def get_parent_candidates(self, req_id):
       req = self.requirements.get(req_id)
       if not req:

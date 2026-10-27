@@ -24,8 +24,8 @@ algorithm and one player uses another. If your problem is snake, you might show 
 # demo.py
 #######################################################################
 
+from crosswords.puzzle01 import crossword as crossword01
 from crosswords.puzzle02 import crossword as crossword02
-from crosswords.puzzle03 import crossword as crossword03
 
 from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
 
@@ -36,90 +36,106 @@ from problems import Specification
 
 from pathlib import Path
 
+IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Node2Vec agent
+SOLVE_CROSSWORD = True # set to True to run the crossword puzzle else False to run the requirements problem
 
-CORRECT_SOLUTION = [list(row) for row in crossword03["solution_grid"]]
-'''
-cw = Crossword(
-      grid = normalize_grid(crossword03["grid"]), # loads the grid
-      clues = crossword03["clues"], # loads the clues
-      word_bank = crossword03["word_bank"]
-   )
 
-cw.print_grid()
-#cw.print_clues()
+print("\nStarting the demo...\n"\
+      "Current set up is: \n"\
+      f"IS_RANDOM_AGENT: {IS_RANDOM_AGENT}\n"\
+      f"SOLVE_CROSSWORD: {SOLVE_CROSSWORD}\n")
 
-# making a graph representation of the crossword puzzle
-puzzle = CrosswordPuzzle(cw)
-puzzle.build_graph()
-#puzzle.print_graph()
+if IS_RANDOM_AGENT:
+    print("Running Random Agent...")
 
-agent = Node2VecAgent(puzzle)
 
-MAX_ATTEMPTS = 10
+else:
+    if SOLVE_CROSSWORD:
+        CORRECT_SOLUTION = [list(row) for row in crossword02["solution_grid"]]
+        MAX_ATTEMPTS = 10
 
-print(f"Running {agent.__str__()}...")
-game = PuzzleGame(puzzle, agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
-game.solve_the_puzzle()
+        cw = Crossword(
+            grid = normalize_grid(crossword02["grid"]), # loads the grid
+            clues = crossword02["clues"], # loads the clues
+            word_bank = crossword02["word_bank"]
+        )
 
-# adding timer for solving the puzzle
-start_time = time.perf_counter()
-try:
-    game.solve_the_puzzle()
-finally:
-    elapsed_seconds = time.perf_counter() - start_time
-    print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
-    print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
+        cw.print_grid()
+        #cw.print_clues()
 
-# running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
-agent2 = Node2VecBacktrackingWithForwardCheckingAgent(puzzle)
-print(f"Running {agent2.__str__()}...")
-game2 = PuzzleGame(puzzle, agent2, MAX_ATTEMPTS, CORRECT_SOLUTION)
-game2.solve_the_puzzle()
+        # making a graph representation of the crossword puzzle
+        puzzle = CrosswordPuzzle(cw)
+        puzzle.build_graph()
+        #puzzle.print_graph()
+        
+        '''
+        # for testing the Node2VecAgent on the crossword puzzle
+        agent = Node2VecAgent(puzzle)
 
-# adding timer for solving the puzzle
-start_time = time.perf_counter()
-try:
-    game2.solve_the_puzzle()
-finally:
-    elapsed_seconds = time.perf_counter() - start_time
-    print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
-    print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
+        print(f"Running {agent.__str__()}...")
+        game = PuzzleGame(puzzle, agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
+        game.solve_the_puzzle()
 
-# running the Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent on the same puzzle
-agent3 = Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(puzzle)
-print(f"Running {agent3.__str__()}...")
-game3 = PuzzleGame(puzzle, agent3, MAX_ATTEMPTS, CORRECT_SOLUTION)
+        # adding timer for solving the puzzle
+        start_time = time.perf_counter()
+        try:
+            game.solve_the_puzzle()
+        finally:
+            elapsed_seconds = time.perf_counter() - start_time
+            print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
+            print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
+        '''
 
-# adding timer for solving the puzzle
-start_time = time.perf_counter()
-try:
-    game3.solve_the_puzzle()
-finally:
-    elapsed_seconds = time.perf_counter() - start_time
-    print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
-    print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes")
-'''
+        # running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
+        agent2 = Node2VecBacktrackingWithForwardCheckingAgent(puzzle)
+        print(f"Running {agent2.__str__()}...")
+        game2 = PuzzleGame(puzzle, agent2, MAX_ATTEMPTS, CORRECT_SOLUTION)
 
-# for requirements problem
-# getting the input file path
-input_file_name = 'requirements_only.csv'
-input_file = Path(__file__).parent / "data" / input_file_name
+        # adding timer for solving the puzzle
+        start_time = time.perf_counter()
+        try:
+            game2.solve_the_puzzle()
+        finally:
+            elapsed_seconds = time.perf_counter() - start_time
+            print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
+            print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
 
-# try to see if the input file exists
-if not input_file.exists():
-  raise FileNotFoundError(f"Input file not found: {input_file}")
+        start_time = 0 # reseting the timer for the next agent
 
-# establishing the specification and loading the requirements
-spec = Specification()
-spec.load_req(input_file)
-# debug - check if the requirements were loaded correctly
-print(f"Loaded {len(spec.requirements)} requirements")
+        # running the Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent on the same puzzle
+        agent3 = Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(puzzle)
+        print(f"Running {agent3.__str__()}...")
+        game3 = PuzzleGame(puzzle, agent3, MAX_ATTEMPTS, CORRECT_SOLUTION)
 
-spec.build_graph()
-#spec.print_graph()
+        # adding timer for solving the puzzle
+        start_time = time.perf_counter()
+        try:
+            game3.solve_the_puzzle()
+        finally:
+            elapsed_seconds = time.perf_counter() - start_time
+            print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
+            print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes")
 
-# creating the agent
-agentReq0 = Node2VecRequirementsDecompositionAgent(spec)
-solution = agentReq0.solve()
-agentReq0.print_solution(solution)
+    else:
+        # for requirements problem
+        # getting the input file path
+        input_file_name = 'requirements_only.csv'
+        input_file = Path(__file__).parent / "data" / input_file_name
 
+        # try to see if the input file exists
+        if not input_file.exists():
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+
+        # establishing the specification and loading the requirements
+        spec = Specification()
+        spec.load_req(input_file)
+        # debug - check if the requirements were loaded correctly
+        print(f"Loaded {len(spec.requirements)} requirements")
+
+        spec.build_graph()
+        #spec.print_graph()
+
+        # creating the agent
+        agentReq0 = Node2VecRequirementsDecompositionAgent(spec)
+        solution = agentReq0.solve()
+        agentReq0.print_solution(solution)

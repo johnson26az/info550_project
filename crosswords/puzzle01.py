@@ -1,78 +1,105 @@
-# puzzle01.py
+# puzzle02.py
+
+# a simplified crossword puzzle
+# four copies and create valid four-letter across and down entries.
+# trying to see if the node2vec agent can solve this simple crossword puzzle
+#
+# The word square is:
+#
+# B A L L
+# A R E A
+# L E A D
+# L A D Y
+#
+# Its columns are the same four words as its rows.
 
 crossword = {
     "size": (10, 10),
 
     "grid": [
-        "START#AREA",
-        "ROAMS#NOTE",
-        "EVENT#SAIL",
-        "ALONE#TIME",
+        "    #    #",
+        "    #    #",
+        "    #    #",
+        "    #    #",
         "##########",
-        "PLANE#RISE",
-        "OCEAN#LEAF",
-        "SMILE#ROPE",
-        "TRAIN#MOON",
-        "HOMES#WAVE"
+        "    #    #",
+        "    #    #",
+        "    #    #",
+        "    #    #",
+        "##########"
     ],
 
     "clues": {
         "across": {
-            1: "Begin",
-            6: "Region",
-            7: "Wanders around",
-            8: "A short message",
-            9: "Something that happens",
-            10: "Move using wind",
-            11: "By oneself",
-            12: "What clocks measure",
-            16: "Flying vehicle",
-            18: "Move upward",
-            19: "Huge body of water",
-            21: "Part of a plant",
-            22: "Happy expression",
-            24: "Strong cord",
-            25: "Vehicle on tracks",
-            27: "Earth’s satellite",
-            28: "Places people live",
-            30: "Water crest"
+            1: "A round object used in sports or games",
+            2: "A region or space",
+            3: "A substance made from plants, or to guide",
+            4: "A young woman",
+            5: "A round object used in sports or games",
+            6: "A region or space",
+            7: "A substance made from plants, or to guide",
+            8: "A young woman",
+            9: "A round object used in sports or games",
+            10: "A region or space",
+            11: "A substance made from plants, or to guide",
+            12: "A young woman",
+            13: "A round object used in sports or games",
+            14: "A region or space",
+            15: "A substance made from plants, or to guide",
+            16: "A young woman"
         },
         "down": {
-            1: "Confident",
-            2: "Sound quality",
-            3: "State firmly",
-            4: "Water from clouds",
-            5: "Golf support",
-            6: "Once again",
-            7: "Strong cord",
-            8: "Word said at the end of a prayer",
-            9: "Move using wind",
-            10: "By yourself",
-            11: "Short message",
-            12: "Move upward",
-            13: "Part of a plant",
-            14: "Earth’s satellite",
-            15: "Water crest",
-            16: "A strategy",
-            17: "Huge body of water",
-            18: "Happy expression",
-            19: "Vehicle on tracks",
-            20: "Places people live"
+            1: "A round object used in sports or games",
+            2: "A region or space",
+            3: "A substance made from plants, or to guide",
+            4: "A young woman",
+            5: "A round object used in sports or games",
+            6: "A region or space",
+            7: "A substance made from plants, or to guide",
+            8: "A young woman",
+            9: "A round object used in sports or games",
+            10: "A region or space",
+            11: "A substance made from plants, or to guide",
+            12: "A young woman",
+            13: "A round object used in sports or games",
+            14: "A region or space",
+            15: "A substance made from plants, or to guide",
+            16: "A young woman"
         }
     },
 
     "word_bank": [
-        "START", "AREA", "ROAMS", "NOTE", "EVENT", "SAIL", "ALONE", "TIME",
-        "PLANE", "RISE", "OCEAN", "LEAF", "SMILE", "ROPE", "TRAIN", "MOON",
-        "HOMES", "WAVE", "BEGIN", "COMMENCE", "OPEN", "INITIATE", "LAUNCH",
-        "ZONE", "DISTRICT", "SECTOR", "FIELD", "ROVES", "MEANDERS", "DRIFTS",
-        "WANDERS", "MEMO", "TEXT", "LINE", "OCCURRENCE", "INCIDENT", "HAPPENING",
-        "GLIDE", "SOLO", "LONE", "SINGLE", "HOURS", "MINUTES", "SECONDS",
-        "JET", "AIRCRAFT", "LIFT", "ASCEND", "UP", "SEA", "GULF", "STEM", "ROOT",
-        "SEED", "GRIN", "BEAM", "CABLE", "TRAM", "METRO", "PLAN",
-        "LUNA", "HOUSES", "DWELLINGS", "SURF", "CREST", "SURE",
-        "TONE", "ASSERT", "RAIN", "TEE", "AGAIN", "AMEN", "CERTAIN",
-        "POSITIVE", "TIMBRE", "PITCH", "CLAIM", "DECLARE", "STATE", "DRIZZLE",
-        "PEG", "REPEAT", "TACTIC", "METHOD", "EGGS"
+        "BALL", "AREA","LEAD", "LADY", "ABLE",
+        "ACID", "AGED", "ALSO", "ARCH", "ARMY",
+        "AWAY", "BABY", "BACK", "BAKE", "BAND",
+        "BANK", "BASE", "BATH", "BEAR", "BEAT",
+        "BELL", "BELT", "BEST", "BIKE", "BIRD",
+        "BALL", "AREA","LEAD", "LADY", "ABLE",
+        "BLOW", "BLUE", "BOAT", "BODY", "BOND",
+        "BOOK", "BOOT", "BORN", "BOWL", "BREW",
+        "CAKE", "CALL", "CALM", "CAME", "CAMP",
+        "CARD", "CARE", "CASE", "CASH", "CHAT",
+        "CITY", "CLAY", "CLIP", "CLUB", "COAT",
+        "BALL", "AREA","LEAD", "LADY", "ABLE",
+        "CODE", "COLD", "COME", "COOK", "COOL",
+        "COPY", "DAWN", "DEAL", "DEEP", "DESK",
+        "EAST", "ECHO", "EDGE", "ELSE", "EDIT",
+        "BALL", "AREA","LEAD", "LADY", "ABLE",
+        "EVER", "FACE", "FACT", "FAIL", "FAIR",
+        "FALL", "FARM", "FAST", "FEAR", "FEEL",
+        "FILE", "FILL", "FIRE", "FISH", "FILM"
+    ],
+
+    "solution_grid": [
+        "BALL#BALL#",
+        "AREA#AREA#",
+        "LEAD#LEAD#",
+        "LADY#LADY#",
+        "##########",
+        "BALL#BALL#",
+        "AREA#AREA#",
+        "LEAD#LEAD#",
+        "LADY#LADY#",
+        "##########"
     ]
 }
