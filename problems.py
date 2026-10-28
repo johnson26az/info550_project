@@ -117,8 +117,6 @@ class TicTacToe:
 # problems.py
 #######################################################################
 
-import networkx as nx
-
 '''
 helper functions
 '''
@@ -412,6 +410,7 @@ class PuzzleGame:
          print("\nAGENT FAILED TO FIND A CORRECT SOLUTION AFTER MAX ATTEMPTS.")
 
 
+import networkx as nx
 import csv
 import re
 
@@ -534,8 +533,9 @@ class Specification:
    def build_domains(self):
       domains = {}
 
+      # for each requirement, determine its possible parent candidates based on its level
       for req in self.requirements.values():
-         domains[req.req_id] = self.get_parent_candidates(req)
+         domains[req.req_id] = self.get_parent_candidates(req.req_id)
 
       return domains
 

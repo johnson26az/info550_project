@@ -496,10 +496,12 @@ class Node2VecRequirementCSPAgent:
   def __str__(self):
     return "Node2Vec Requirement CSP Agent"
 
+
   def __init__(self, specification):
     self.spec = specification
     self.model = None
     self.csp = specification.build_csp()
+
 
   def _train_embedding(self):
     if self.spec.G.number_of_nodes() == 0:
@@ -517,11 +519,17 @@ class Node2VecRequirementCSPAgent:
 
     self.model = node2vec.fit(window=10, min_count=1)
 
+
   def is_complete(self, assignment):
     return len(assignment) == len(self.csp["variables"])
 
+
   def score_parent(self, req_id, parent_id):
-    return self.model.wv.similarity(str(req_id), str(parent_id))
+    try:
+      return self.model.wv.similarity(str(req_id), str(parent_id))
+    except KeyError:
+      return 0.0
+
 
   def order_domain_values(self, req_id, domains):
     ranked = []
@@ -580,12 +588,12 @@ class Node2VecRequirementCSPAgent:
     if child.req_level == "Subsystem":
       if parent.req_level != "System":
         return False
-      elif child.req_level == "Component":
-        if parent.req_level not in ["System", "Subsystem"]:
-          return False
-      elif child.req_level == "Non-Functional":
-        if parent.req_level not in ["System", "Subsystem", "Component"]:
-          return False
+    elif child.req_level == "Component":
+      if parent.req_level !="Subsystem":
+        return False
+    elif child.req_level == "Non-Functional":
+      if parent.req_level not in ["System", "Subsystem", "Component"]:
+        return False
 
     return True
 
@@ -647,34 +655,25 @@ class Node2VecRequirementsDecompositionAgent(Node2VecRequirementCSPAgent):
   # since the consistency checker already identifies the cycles, we can 
   # prune any domain value that would create one
   def requirements_forward_checking(self, req_id, parent_id, assignment, domains):
-    if parent_id is None:
-      return True
-
     for variable in domains:
       if variable in assignment:
         continue
 
       new_domain = []
 
-      for candidate_parent in domains[variable]:
-        if candidate_parent is None:
-          new_domain.append(candidate_parent)
-          continue
-
-        test_assignment = assignment.copy()
-        test_assignment[variable] = (candidate_parent)
-
-        if self.is_consistent(variable, candidate_parent, test_assignment):
-          new_domain.append(candidate_parent)
+      for candiate_parent in domains[variable]:
+        if self.is_consistent(variable, candiate_parent, assignment):
+          new_domain.append(candiate_parent)
 
       domains[variable] = new_domain
 
+      # domain wipeout
       if len(new_domain) == 0:
         return False
-    
+
     return True
 
-
+  
   def requirement_backtracking_with_forward_checking(self, assignment, domains):
     if self.is_complete(assignment):
       return assignment

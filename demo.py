@@ -37,8 +37,11 @@ from problems import Specification
 from pathlib import Path
 
 IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Node2Vec agent
-SOLVE_CROSSWORD = True # set to True to run the crossword puzzle else False to run the requirements problem
+SOLVE_CROSSWORD = False # set to True to run the crossword puzzle else False to run the requirements problem
 
+def print_elapsed_time(elapsed_seconds):
+    print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
+    print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
 
 print("\nStarting the demo...\n"\
       "Current set up is: \n"\
@@ -82,8 +85,7 @@ else:
             game.solve_the_puzzle()
         finally:
             elapsed_seconds = time.perf_counter() - start_time
-            print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
-            print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
+            print_time(elapsed_seconds)
         '''
 
         # running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
@@ -97,8 +99,7 @@ else:
             game2.solve_the_puzzle()
         finally:
             elapsed_seconds = time.perf_counter() - start_time
-            print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
-            print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
+            print_elapsed_time(elapsed_seconds)
 
         start_time = 0 # reseting the timer for the next agent
 
@@ -113,8 +114,7 @@ else:
             game3.solve_the_puzzle()
         finally:
             elapsed_seconds = time.perf_counter() - start_time
-            print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
-            print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes")
+            print_elapsed_time(elapsed_seconds)
 
     else:
         # for requirements problem
