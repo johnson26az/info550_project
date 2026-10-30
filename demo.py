@@ -31,25 +31,54 @@ from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
 
 from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent, Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent
 from algorithms import Node2VecRequirementsDecompositionAgent
+from algorithms import GreedyRandomAgent
 
 from problems import Specification
 
 from pathlib import Path
 
-IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Node2Vec agent
+IS_RANDOM_AGENT = True # set to True to run the random agent else False to run the Node2Vec agent
 SOLVE_CROSSWORD = False # set to True to run the crossword puzzle else False to run the requirements problem
 
+# supporting functions in the demo.py file
 def print_elapsed_time(elapsed_seconds):
     print(f"Elapsed time: {elapsed_seconds:.2f} seconds")
     print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
+
 
 print("\nStarting the demo...\n"\
       "Current set up is: \n"\
       f"IS_RANDOM_AGENT: {IS_RANDOM_AGENT}\n"\
       f"SOLVE_CROSSWORD: {SOLVE_CROSSWORD}\n")
 
+
 if IS_RANDOM_AGENT:
-    print("Running Random Agent...")
+    MAX_ATTEMPTS = 25
+    CORRECT_SOLUTION = [list(row) for row in crossword02["solution_grid"]]
+
+    cw = Crossword(
+        grid = normalize_grid(crossword02["grid"]), # loads the grid
+        clues = crossword02["clues"], # loads the clues
+        word_bank = crossword02["word_bank"]
+    )
+
+    cw.print_grid()
+
+    puzzle = CrosswordPuzzle(cw)
+    puzzle.build_graph()
+
+    random_agent = GreedyRandomAgent(puzzle)
+    print(f"Running {random_agent.__str__()}...")
+    game = PuzzleGame(puzzle, random_agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
+
+    start_time = time.perf_counter()
+    try:
+        game.solve_the_puzzle()
+    finally:
+        elapsed_seconds = time.perf_counter() - start_time
+        print_elapsed_time(elapsed_seconds)
+
+
 
 
 else:
@@ -85,7 +114,7 @@ else:
             game.solve_the_puzzle()
         finally:
             elapsed_seconds = time.perf_counter() - start_time
-            print_time(elapsed_seconds)
+            print_elapsed_time(elapsed_seconds)
         '''
 
         # running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
@@ -137,5 +166,13 @@ else:
 
         # creating the agent
         agentReq0 = Node2VecRequirementsDecompositionAgent(spec)
-        solution = agentReq0.solve()
+
+        # adding timer for solving the requirement decomposition problem
+        start_time = time.perf_counter()
+        try:
+            solution = agentReq0.solve()
+        finally:
+            elapsed_seconds = time.perf_counter() - start_time
+            print_elapsed_time(elapsed_seconds)
+
         agentReq0.print_solution(solution)

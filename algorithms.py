@@ -2,6 +2,7 @@
 This file will contain implementations of each algorithm/agent type.
 '''
 import random
+from node2vec import Node2Vec
 
 class RandomAgent:
   def __str__(self):
@@ -11,14 +12,150 @@ class RandomAgent:
     return moves[random.randrange(len(moves))]
 
 
+# extending the RandomAgent to solve the crossoword and requirements
+# decomposition problems using a greedy approach.
+class GreedyRandomAgent(RandomAgent):
+  def __str__(self):
+    return "Greedy Random Agent"
+
+  
+  def __init__(self, puzzle):
+    self.puzzle = puzzle
+    self.model = None
+
+
+  def initialize_embeddings(self, problem):
+    if self.model is not None:
+      return
+
+    problem.build_graph()
+
+    node2vec = Node2Vec(
+      problem.G,
+      dimensions = 128,
+      walk_length = 20,
+      num_walks = 100,
+      workers = 4
+    )
+
+    self.model = node2vec.fit(window=10, min_count=1)
+
+  def is_consistent(self, problem, slot_id, word):
+    # check whether a candidate word agrees with already assigned neiboring slots
+    for neighbor in problem.graph[slot_id]["neighbors"]:
+      if neighbor not in problem.assignment:
+        continue
+
+      assigned_word = problem.assignment[neighbor]
+
+      my_index, neighbor_index = problem.graph[slot_id]["intersections"][neighbor]
+
+      if word[my_index] != assigned_word[neighbor_index]:
+        return False
+
+    return True
+
+
+  # greedy heuristic score
+  def score_word(self, problem, slot_id, word):
+    score = 0.0
+
+    try:
+      score += self.model.wv.similarity(slot_id, word)
+    except KeyError:
+      pass
+
+    # reward compatibility with neighboring slots
+    for neighbor in problem.graph[slot_id]["neighbors"]:
+      if neighbor in problem.assignment:
+        assigned_word = problem.assignment[neighbor]
+
+        try:
+          score += self.model.wv.similarity(word, assigned_word)
+        except KeyError:
+          pass
+      else:
+        my_index, neighbor_index = problem.graph[slot_id]["intersections"][neighbor]
+
+        compatibility_count = 0
+
+        for candidate in problem.domain[neighbor]:
+          if candidate[neighbor_index] == word[my_index]:
+            compatibility_count += 1
+
+          score += compatibility_count
+
+    return score
+
+  def get_move(self, problem):
+    if self.model is None:
+      self.initialize_embeddings(problem)
+
+    unassigned_slots = [
+      slot_id
+      for slot_id in problem.slots
+      if slot_id not in problem.assignment
+    ]
+
+    if not unassigned_slots:
+      return None
+
+    # MRV heuristic
+    slot_id = min(
+      unassigned_slots,
+      key=lambda s: len([
+        w for w in problem.domain[s]
+        if w not in problem.assignment.values()
+      ])
+    )
+
+    # valid candidate words for the selected slot
+    candidates = [
+      word for word in problem.domain[slot_id]
+      if word not in problem.assignment.values()
+      and self.is_consistent(problem, slot_id, word)
+    ]
+
+    if not candidates:
+      return None
+
+    # score every candidate word based on the greedy heuristic
+    scored_candidates = {}
+
+    for word in candidates:
+      scored_candidates[word] = self.score_word(problem, slot_id, word)
+
+      best_score = max(scored_candidates.values())
+
+      best_words = [
+        word for word, score in scored_candidates.items()
+        if score == best_score
+      ]
+
+      # random tie-breaking among the best-scoring candidates
+      chosen_word = random.choice(best_words)
+
+      return slot_id, chosen_word
+
+  # this will apply the solution to the crossword grid for ease of readability
+  def apply_solution_to_grid(self, solution):
+    cw = self.puzzle.crossword
+  
+    for slot_id, word in solution.items():
+      slot = self.puzzle.slots[slot_id]
+      cells = slot["cells"]
+        
+      for (row, col), letter in zip(cells, word):
+        cw.set_cell_letter(row, col, letter)
+
+
+
 #######################################################################
 # Addition to the template for INFO 450/550.
 # algorithms.py
 #######################################################################
 
 import numpy as np
-
-from node2vec import Node2Vec
 
 # compute cosine similarity between two vectors
 def cosine_similarity(vec1, vec2):
