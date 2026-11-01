@@ -39,6 +39,8 @@ from pathlib import Path
 
 IS_RANDOM_AGENT = True # set to True to run the random agent else False to run the Node2Vec agent
 SOLVE_CROSSWORD = False # set to True to run the crossword puzzle else False to run the requirements problem
+INPUT_FILE_NAME = 'requirements_only.csv'
+INPUT_FILE = Path(__file__).parent / "data" / INPUT_FILE_NAME
 
 # supporting functions in the demo.py file
 def print_elapsed_time(elapsed_seconds):
@@ -53,7 +55,7 @@ print("\nStarting the demo...\n"\
 
 
 if IS_RANDOM_AGENT:
-    MAX_ATTEMPTS = 25
+    MAX_ATTEMPTS = 50
     CORRECT_SOLUTION = [list(row) for row in crossword02["solution_grid"]]
 
     cw = Crossword(
@@ -67,7 +69,8 @@ if IS_RANDOM_AGENT:
     puzzle = CrosswordPuzzle(cw)
     puzzle.build_graph()
 
-    random_agent = GreedyRandomAgent(puzzle)
+    random_agent = GreedyRandomAgent()
+    random_agent.set_puzzle(puzzle)
     print(f"Running {random_agent.__str__()}...")
     game = PuzzleGame(puzzle, random_agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
 
@@ -77,8 +80,29 @@ if IS_RANDOM_AGENT:
     finally:
         elapsed_seconds = time.perf_counter() - start_time
         print_elapsed_time(elapsed_seconds)
+    start_time = 0 # reseting the timer for the next problem
 
 
+    # preping the requirements decomposition
+    # try to see if the input file exists
+    if not INPUT_FILE.exists():
+        raise FileNotFoundError(f"Input file not found: {INPUT_FILE}")
+
+    spec = Specification()
+    spec.load_req(INPUT_FILE)
+    print(f"Loaded requirements from {INPUT_FILE}")
+    spec.build_graph()
+
+    random_agent.set_spec(spec)
+
+    start_time = time.perf_counter()
+    try:
+        solution = random_agent.solve()
+    finally:
+        elapsed_seconds = time.perf_counter() - start_time
+        print_elapsed_time(elapsed_seconds)
+
+    random_agent.print_solution(solution)
 
 
 else:
@@ -148,16 +172,16 @@ else:
     else:
         # for requirements problem
         # getting the input file path
-        input_file_name = 'requirements_only.csv'
-        input_file = Path(__file__).parent / "data" / input_file_name
+        #input_file_name = 'requirements_only.csv'
+        #input_file = Path(__file__).parent / "data" / input_file_name
 
         # try to see if the input file exists
-        if not input_file.exists():
-            raise FileNotFoundError(f"Input file not found: {input_file}")
+        if not INPUT_FILE.exists():
+            raise FileNotFoundError(f"Input file not found: {INPUT_FILE}")
 
         # establishing the specification and loading the requirements
         spec = Specification()
-        spec.load_req(input_file)
+        spec.load_req(INPUT_FILE)
         # debug - check if the requirements were loaded correctly
         print(f"Loaded {len(spec.requirements)} requirements")
 

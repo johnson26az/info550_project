@@ -19,8 +19,17 @@ class GreedyRandomAgent(RandomAgent):
     return "Greedy Random Agent"
 
   
-  def __init__(self, puzzle):
+  def __init__(self):
+    self.puzzle = None
+    self.spec = None
+    self.model = None
+
+  def set_puzzle(self, puzzle):
     self.puzzle = puzzle
+    self.model = None
+
+  def set_spec(self, spec):
+    self.spec = spec
     self.model = None
 
 
@@ -28,7 +37,16 @@ class GreedyRandomAgent(RandomAgent):
     if self.model is not None:
       return
 
+    if not hasattr(problem, "build_graph"):
+      return
+
     problem.build_graph()
+
+    if problem.G.number_of_nodes() == 0:
+      return
+
+    if problem.G.number_of_edges() == 0:
+      return
 
     node2vec = Node2Vec(
       problem.G,
@@ -40,7 +58,7 @@ class GreedyRandomAgent(RandomAgent):
 
     self.model = node2vec.fit(window=10, min_count=1)
 
-  def is_consistent(self, problem, slot_id, word):
+  def crossword_is_consistent(self, problem, slot_id, word):
     # check whether a candidate word agrees with already assigned neiboring slots
     for neighbor in problem.graph[slot_id]["neighbors"]:
       if neighbor not in problem.assignment:
@@ -57,7 +75,8 @@ class GreedyRandomAgent(RandomAgent):
 
 
   # greedy heuristic score
-  def score_word(self, problem, slot_id, word):
+  # for solving the crossword puzzle
+  def crosssword_score_word(self, problem, slot_id, word):
     score = 0.0
 
     try:
@@ -87,7 +106,21 @@ class GreedyRandomAgent(RandomAgent):
 
     return score
 
+
   def get_move(self, problem):
+
+    # crossword puzzle
+    if hasattr(problem, "slots"):
+      return self._crossword_get_move(problem)
+    
+    # requirements decomposition problem
+    elif hasattr(problem, "requirements"):
+      return self._decomposition_get_move(problem)
+
+    return None
+
+
+  def _crossword_get_move(self, problem):
     if self.model is None:
       self.initialize_embeddings(problem)
 
@@ -100,7 +133,7 @@ class GreedyRandomAgent(RandomAgent):
     if not unassigned_slots:
       return None
 
-    # MRV heuristic
+    # mrv heuristic
     slot_id = min(
       unassigned_slots,
       key=lambda s: len([
@@ -113,7 +146,7 @@ class GreedyRandomAgent(RandomAgent):
     candidates = [
       word for word in problem.domain[slot_id]
       if word not in problem.assignment.values()
-      and self.is_consistent(problem, slot_id, word)
+      and self.crossword_is_consistent(problem, slot_id, word)
     ]
 
     if not candidates:
@@ -123,19 +156,19 @@ class GreedyRandomAgent(RandomAgent):
     scored_candidates = {}
 
     for word in candidates:
-      scored_candidates[word] = self.score_word(problem, slot_id, word)
+      scored_candidates[word] = self.crosssword_score_word(problem, slot_id, word)
 
-      best_score = max(scored_candidates.values())
+    best_score = max(scored_candidates.values())
+    best_words = [
+      word for word, score in scored_candidates.items()
+      if score == best_score
+    ]
 
-      best_words = [
-        word for word, score in scored_candidates.items()
-        if score == best_score
-      ]
+    # random tie-breaking among the best-scoring candidates
+    chosen_word = random.choice(best_words)
 
-      # random tie-breaking among the best-scoring candidates
-      chosen_word = random.choice(best_words)
-
-      return slot_id, chosen_word
+    return slot_id, chosen_word
+  
 
   # this will apply the solution to the crossword grid for ease of readability
   def apply_solution_to_grid(self, solution):
@@ -147,6 +180,191 @@ class GreedyRandomAgent(RandomAgent):
         
       for (row, col), letter in zip(cells, word):
         cw.set_cell_letter(row, col, letter)
+
+
+  # functions for requirements decomposition problem
+
+  # checks if the assignment of the child to the parent would create a cycle
+  # in the requirement hierarchy
+  def _creates_cycle(self, problem, child_id, parent_id):
+    current = parent_id
+
+    while current is not None:
+      if current == child_id:
+        return True
+
+      req = problem.get_requirement(current)
+
+      if req.parent is None:
+        break
+
+      current = req.parent.req_id
+
+    return False
+
+
+  # checks if the assignment of the child to the parent is consistent
+  def decomposition_is_consistent(self, problem, child_id, parent_id):
+    # protect against non-existent parent
+    if parent_id is None:
+      return False
+    
+    child = problem.get_requirement(child_id)
+    parent = problem.get_requirement(parent_id)
+
+    if child is None or parent is None:
+      return False
+
+    if child_id == parent_id:
+      return False
+
+    if self._creates_cycle(problem, child_id, parent_id):
+      return False
+
+    if child.req_level == "Subsystem":
+      return parent.req_level == "System"
+    elif child.req_level == "Component":
+      return parent.req_level == "Subsystem"
+    elif child.req_level == "Non-Functional":
+      return parent.req_level in [
+        "System",
+        "Subsystem",
+        "Component"
+      ]
+    
+    return False
+
+
+  def decomposition_score(self, problem, child_id, parent_id):
+    score = 0
+
+    if self.model is not None:
+      try:
+        score += self.model.wv.similarity(str(child_id), str(parent_id))
+      except KeyError:
+        pass
+
+      child = problem.get_requirement(child_id)
+      parent = problem.get_requirement(parent_id)
+
+      child_words = problem.tokenize_text(child.req_text)
+      parent_words = problem.tokenize_text(parent.req_text)
+
+      overlap = len(child_words & parent_words)
+
+      score += overlap
+
+      if problem.G.has_edge(child_id, parent_id):
+        score += problem.G[child_id][parent_id]["weight"]
+    
+    return score
+
+
+  def _decomposition_get_move(self, problem):
+    if self.model is None:
+      self.initialize_embeddings(problem)
+
+    unassigned = [
+      req_id
+      for req_id, req in problem.requirements.items()
+      if req.parent is None
+      and req.req_level != "System"
+    ]
+
+    if not unassigned:
+      return None
+
+    # mrv heuristic
+    child_id = min(
+      unassigned,
+      key=lambda r:
+        len([
+          p
+          for p in problem.get_parent_candidates(r)
+          if self.decomposition_is_consistent(problem, r, p)
+        ])
+    )
+
+    candidates = [
+      parent_id
+
+      for parent_id
+      in problem.get_parent_candidates(child_id)
+
+      if self.decomposition_is_consistent(problem, child_id, parent_id)
+    ]
+
+    if not candidates:
+      return None
+
+    scores = {
+      parent_id:
+        self.decomposition_score(problem, child_id, parent_id)
+      for parent_id in candidates
+    }
+
+    best_score = max(scores.values())
+
+    best_parents = [
+      parent_id
+
+      for parent_id, score in scores.items()
+      if score == best_score
+    ]
+
+    chosen_parent = random.choice(best_parents)
+
+    return child_id, chosen_parent
+
+
+  def apply_decomposition_move(self, problem, child_id, parent_id):
+    child = problem.get_requirement(child_id)
+    parent = problem.get_requirement(parent_id)
+
+    if child and parent:
+      child.add_parent(parent)
+
+
+  def solve(self):
+    if self.spec is None:
+      raise ValueError("A specification must be assigned before solving.")
+
+    assignment = {}
+
+    while True:
+      move = self._decomposition_get_move(self.spec)
+
+      if move is None:
+        break
+
+      child_id, parent_id = move
+      self.apply_decomposition_move(self.spec, child_id, parent_id)
+      assignment[child_id] = parent_id
+
+    return assignment
+
+
+  def print_solution(self, assignment):
+      print("\nRequirement Decomposition Solution:\n")
+  
+      for req_id, parent_id in assignment.items():
+        req = self.spec.get_requirement(req_id)
+  
+        if parent_id is None:
+          print(
+            f"{req.req_id} "
+            f"({req.req_level}) "
+            f"-> ROOT"
+          )
+        else:
+          parent = self.spec.get_requirement(parent_id)
+          print(
+            f"{req.req_id} "
+            f"({req.req_level}) "
+            f"-> "
+            f"{parent.req_id} "
+            f"({parent.req_level})"
+          )
 
 
 
