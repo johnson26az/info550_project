@@ -184,59 +184,8 @@ class GreedyRandomAgent(RandomAgent):
 
   # functions for requirements decomposition problem
 
-  # checks if the assignment of the child to the parent would create a cycle
-  # in the requirement hierarchy
-  def _creates_cycle(self, problem, child_id, parent_id):
-    current = parent_id
-
-    while current is not None:
-      if current == child_id:
-        return True
-
-      req = problem.get_requirement(current)
-
-      if req.parent is None:
-        break
-
-      current = req.parent.req_id
-
-    return False
-
-
-  # checks if the assignment of the child to the parent is consistent
-  def decomposition_is_consistent(self, problem, child_id, parent_id):
-    # protect against non-existent parent
-    if parent_id is None:
-      return False
-    
-    child = problem.get_requirement(child_id)
-    parent = problem.get_requirement(parent_id)
-
-    if child is None or parent is None:
-      return False
-
-    if child_id == parent_id:
-      return False
-
-    if self._creates_cycle(problem, child_id, parent_id):
-      return False
-
-    if child.req_level == "Subsystem":
-      return parent.req_level == "System"
-    elif child.req_level == "Component":
-      return parent.req_level == "Subsystem"
-    elif child.req_level == "Non-Functional":
-      return parent.req_level in [
-        "System",
-        "Subsystem",
-        "Component"
-      ]
-    
-    return False
-
-
   def decomposition_score(self, problem, child_id, parent_id):
-    score = 0
+    score = 0.0
 
     if self.model is not None:
       try:
@@ -252,23 +201,22 @@ class GreedyRandomAgent(RandomAgent):
 
       overlap = len(child_words & parent_words)
 
-      score += overlap
-
-      if problem.G.has_edge(child_id, parent_id):
-        score += problem.G[child_id][parent_id]["weight"]
+      score += max(
+        0,
+        self.model.wv.similarity(str(child_id), str(parent_id))
+      )
     
     return score
-
+  
 
   def _decomposition_get_move(self, problem):
     if self.model is None:
       self.initialize_embeddings(problem)
 
     unassigned = [
-      req_id
-      for req_id, req in problem.requirements.items()
-      if req.parent is None
-      and req.req_level != "System"
+      variable
+      for variable in problem.variables
+      if problem.get_requirement(variable).parent is None
     ]
 
     if not unassigned:
@@ -278,33 +226,25 @@ class GreedyRandomAgent(RandomAgent):
     child_id = min(
       unassigned,
       key=lambda r:
-        len([
-          p
-          for p in problem.get_parent_candidates(r)
-          if self.decomposition_is_consistent(problem, r, p)
-        ])
+        len(problem.legal_values(r))
     )
 
-    candidates = [
-      parent_id
-
-      for parent_id
-      in problem.get_parent_candidates(child_id)
-
-      if self.decomposition_is_consistent(problem, child_id, parent_id)
-    ]
+    candidates = problem.legal_values(child_id)
 
     if not candidates:
       return None
 
+    # greedy heuristic
     scores = {
       parent_id:
         self.decomposition_score(problem, child_id, parent_id)
       for parent_id in candidates
     }
 
+    # best value
     best_score = max(scores.values())
 
+    # random tie-breaking
     best_parents = [
       parent_id
 
@@ -329,6 +269,9 @@ class GreedyRandomAgent(RandomAgent):
     if self.spec is None:
       raise ValueError("A specification must be assigned before solving.")
 
+    # building the csp
+    self.spec.build_csp()
+
     assignment = {}
 
     while True:
@@ -338,7 +281,9 @@ class GreedyRandomAgent(RandomAgent):
         break
 
       child_id, parent_id = move
+
       self.apply_decomposition_move(self.spec, child_id, parent_id)
+
       assignment[child_id] = parent_id
 
     return assignment

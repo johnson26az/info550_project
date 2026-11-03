@@ -428,9 +428,6 @@ class Requirement:
       self.parent = None  # this will hold the parent requirement
       self.children = []
 
-      # requirement-specific constraints for the CSP
-      self.constraints = []
-
 
    def add_parent(self, parent):
       if parent and self.parent is None:
@@ -442,9 +439,6 @@ class Requirement:
       if child not in self.children:
          self.children.append(child)
 
-
-   def add_constraint(self, variables, func):
-      self.constraints.append((variables, func))
 
    def infer_level(self):
       req_id = self.req_id.upper()
@@ -477,33 +471,21 @@ class Specification:
       self.requirements = {}
       self.G = nx.Graph()  # graph structure for the requirements
 
+      # csp structures
+      self.variables = []
+      self.domains = {}
+      self.constraints = []
+
+
    def add_requirement(self, req):
       self.requirements[req.req_id] = req
+
 
    def get_requirement(self, req_id):
       return self.requirements.get(req_id)
 
-   '''
-   Builds the CSP (Constraint Satisfaction Problem) from the requirements.
-   '''
-   def build_csp(self):
-      variables = self.create_decomposition_variables()
-      domains = self.build_domains()
-      constraints = []
-      
-      for req in self.requirements.values():
-         constraints.extend(req.constraints)
 
-      return {
-         "variables": variables,
-         "domains": domains,
-         "constraints": constraints
-      }
-
-
-   '''
-   Loads the requirements from a CSV file.
-   '''
+   # loads the requirements from a CSV file.
    def load_req(self, file_path):
       with open(file_path, newline="", encoding="cp1252") as csvfile:  # the csv file is written in cp1252 encoding
          reader = csv.DictReader(csvfile)
@@ -520,24 +502,101 @@ class Specification:
 
 
    def create_decomposition_variables(self):
-      variables = []
+      self.variables = [
+         req.req_id
+         for req in self.requirements.values()
+         if req.req_level != "System"
+      ]
 
-      for req in self.requirements.values():
-         variables.append(req.req_id)
-
-      return variables
+      return self.variables
 
 
-   # making the domain self aware of the requrements and the levels of the requirements
-   # this will help in building the CSP and the graph structure for the requirements.
+   # builds the domains for the CSP based on the parent candidates for each variable
    def build_domains(self):
-      domains = {}
+      self.domains = {}
 
-      # for each requirement, determine its possible parent candidates based on its level
-      for req in self.requirements.values():
-         domains[req.req_id] = self.get_parent_candidates(req.req_id)
+      for variable in self.variables:
+         self.domains[variable] = (
+            self.get_parent_candidates(variable)
+         )
 
-      return domains
+      return self.domains
+
+
+   # constraint to ensure a requirement cannot be its own parent
+   def constraint_no_self(self, child_id, parent_id):
+      return child_id != parent_id
+
+
+   # constraint to ensure the parent-child relationship respects the requirement levels
+   def constraint_level(self, child_id, parent_id):
+      child = self.get_requirement(child_id)
+      parent = self.get_requirement(parent_id)
+
+      if child is None or parent is None:
+         return False
+
+      if child.req_level == "Subsystem":
+         return parent.req_level == "System"
+      elif child.req_level == "Component":
+         return parent.req_level == "Subsystem"
+      elif child.req_level == "Non-Functional":
+         return parent.req_level in [
+            "System", "Subsystem", "Component"
+         ]
+
+      return False
+
+
+   # constraint to ensure there are no cycles in the parent-child relationships
+   def constraint_no_cycle(self, child_id, parent_id):
+      current = parent_id
+
+      while current is not None:
+         if current == child_id:
+            return False
+
+         req = self.get_requirement(current)
+
+         if req is None or req.parent is None:
+            break
+
+         current = req.parent.req_id
+
+      return True
+
+
+   # building the constraints for the CSP
+   def build_constraints(self):
+      self.constraints = [
+         self.constraint_no_self,
+         self.constraint_level,
+         self.constraint_no_cycle
+      ]
+
+      return self.constraints
+
+   
+   # builds the CSP (Constraint Satisfaction Problem) from the requirements.
+   def build_csp(self):
+      self.create_decomposition_variables()
+      self.build_domains()
+      self.build_constraints()
+  
+      return {
+         "variables": self.variables,
+         "domains": self.domains,
+         "constraints": self.constraints
+      }
+
+
+   # checks if a given parent-child relationship satisfies all the constraints
+   def satisfies_constraints(self, child_id, parent_id):
+      for constraint in self.constraints:
+         if not constraint(child_id, parent_id):
+            return False
+
+      return True
 
 
    def get_requirement_by_level(self, level):
@@ -618,6 +677,15 @@ class Specification:
                   req2.req_id,
                   weight=len(overlap)
                )
+
+
+   # a function to get the legal moves for a given variable in the CSP
+   def legal_values(self, variable):
+      return [
+         value
+         for value in self.domains[variable]
+         if self.satisfies_constraints(variable, value)
+      ]
 
 
    # debug function to print the graph structure
