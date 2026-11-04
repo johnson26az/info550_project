@@ -3,6 +3,6 @@ numpy==1.26.4
 scipy==1.13.1
 opencv-python==4.10.0.84
 matplotlib
-networkx==3.2.1
-node2vec==0.5.0
-gensim==4.3.2
+networkx==2.8.8
+node2vec==0.4.6
+gensim==4.3.3
