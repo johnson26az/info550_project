@@ -699,3 +699,72 @@ class Specification:
       print("\nEdges:")
       for u, v, data in self.G.edges(data=True):
          print(f"{u} -- {v}, weight: {data['weight']}")
+
+
+   # funcions for checking the solution against the correct solution
+   # load correct solution from a CSV file
+   def load_correct_solution(self, solution_file):
+    expected_parents = {}
+
+    with open(solution_file, newline="", encoding="utf-8-sig") as csvfile:
+        reader = csv.DictReader(csvfile)
+        if reader.fieldnames:
+            reader.fieldnames = [
+                field.lstrip("\ufeff") for field in reader.fieldnames
+            ]
+
+        for row in reader:
+            requirement_id = row["Requirements ID"].strip()
+            parent_text = row["Parent Requirement"].strip()
+            if not parent_text:
+                continue
+
+            parent_ids = set()
+            for parent in parent_text.split(","):
+                parent = parent.strip()
+                range_match = re.fullmatch(
+                    r"([A-Za-z]+)(\d+)\s*[-–]\s*([A-Za-z]+)(\d+)",
+                    parent,
+                )
+                if range_match and range_match.group(1) == range_match.group(3):
+                    prefix = range_match.group(1)
+                    start = int(range_match.group(2))
+                    end = int(range_match.group(4))
+                    parent_ids.update(
+                        f"{prefix}{number:02d}" for number in range(start, end + 1)
+                    )
+                else:
+                    parent_ids.add(parent)
+
+            expected_parents[requirement_id] = parent_ids
+
+    return expected_parents
+
+
+   # return whether the agent solution matches the expected solution from the CSV file
+   def check_requirement_solution(self, agent_solution, correct_solution):
+    """Return whether every generated parent is allowed by the solution CSV."""
+    mismatches = []
+
+    for requirement_id, allowed_parents in correct_solution.items():
+        actual_parent = agent_solution.get(requirement_id)
+        if actual_parent not in allowed_parents:
+            mismatches.append(
+                f"{requirement_id}: expected one of {sorted(allowed_parents)}, "
+                f"got {actual_parent}"
+            )
+
+    unexpected_requirements = set(agent_solution) - set(correct_solution)
+    for requirement_id in sorted(unexpected_requirements):
+        mismatches.append(
+            f"{requirement_id}: not present as a decomposed requirement in the CSV"
+        )
+
+    return not mismatches, mismatches
+
+
+   # clear requirement relationships
+   def reset_requirement_relationships(self):
+      for requirement in self.requirements.values():
+         requirement.parent = None
+         requirement.children.clear()

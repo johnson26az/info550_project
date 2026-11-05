@@ -1,3 +1,5 @@
+import csv
+import re
 import time
 
 import problems as prb
@@ -37,10 +39,14 @@ from problems import Specification
 
 from pathlib import Path
 
-IS_RANDOM_AGENT = True # set to True to run the random agent else False to run the Node2Vec agent
+IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Node2Vec agent
 SOLVE_CROSSWORD = False # set to True to run the crossword puzzle else False to run the requirements problem
 INPUT_FILE_NAME = 'requirements_only.csv'
 INPUT_FILE = Path(__file__).parent / "data" / INPUT_FILE_NAME
+REQ_SOLUTION_NAME = 'requirements_solution.csv'
+REQ_SOLUTION_FILE = Path(__file__).parent / "data" / REQ_SOLUTION_NAME
+
+MAX_ATTEMPTS = 100
 
 # supporting functions in the demo.py file
 def print_elapsed_time(elapsed_seconds):
@@ -53,9 +59,7 @@ print("\nStarting the demo...\n"\
       f"IS_RANDOM_AGENT: {IS_RANDOM_AGENT}\n"\
       f"SOLVE_CROSSWORD: {SOLVE_CROSSWORD}\n")
 
-
 if IS_RANDOM_AGENT:
-    MAX_ATTEMPTS = 50
     CORRECT_SOLUTION = [list(row) for row in crossword02["solution_grid"]]
 
     cw = Crossword(
@@ -95,13 +99,40 @@ if IS_RANDOM_AGENT:
 
     random_agent.set_spec(spec)
 
-    start_time = time.perf_counter()
-    try:
-        solution = random_agent.solve()
-    finally:
-        elapsed_seconds = time.perf_counter() - start_time
-        print_elapsed_time(elapsed_seconds)
+    # loading the expected parents from the solution file
+    if not REQ_SOLUTION_FILE.exists():
+        raise FileNotFoundError(f"Solution file not found: {REQ_SOLUTION_FILE}")
+    requirements_solution = spec.load_correct_solution(REQ_SOLUTION_FILE)
 
+    start_time = time.perf_counter()
+    solution = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        spec.reset_requirement_relationships()
+        solution = random_agent.solve()
+        is_correct, mismatches = spec.check_requirement_solution(
+            solution, requirements_solution
+        )
+
+        if is_correct:
+            print(
+                f"\nAGENT FOUND A CORRECT REQUIREMENTS SOLUTION "
+                f"after {attempt} attempt(s)."
+            )
+            break
+
+        print(f"Attempt {attempt}: agent solution did not match requirements_solution.csv.")
+    else:
+        print(
+            f"\nAGENT FAILED TO FIND A CORRECT REQUIREMENTS SOLUTION "
+            f"after {MAX_ATTEMPTS} attempts."
+        )
+        if mismatches:
+            print("Example mismatch:", mismatches[0])
+
+    elapsed_seconds = time.perf_counter() - start_time
+    print_elapsed_time(elapsed_seconds)
+
+    print(f"{random_agent.__str__()} solution:")
     random_agent.print_solution(solution)
 
 
@@ -185,18 +216,47 @@ else:
         # debug - check if the requirements were loaded correctly
         print(f"Loaded {len(spec.requirements)} requirements")
 
+        # loading the expected parents from the solution file
+        if not REQ_SOLUTION_FILE.exists():
+            raise FileNotFoundError(f"Solution file not found: {REQ_SOLUTION_FILE}")
+        requirements_solution = spec.load_correct_solution(REQ_SOLUTION_FILE)
+
         spec.build_graph()
         #spec.print_graph()
 
         # creating the agent
-        agentReq0 = Node2VecRequirementsDecompositionAgent(spec)
+        agent_req_0 = Node2VecRequirementsDecompositionAgent(spec)
+        print(f"Running {agent_req_0.__str__()}...")
 
         # adding timer for solving the requirement decomposition problem
         start_time = time.perf_counter()
-        try:
-            solution = agentReq0.solve()
-        finally:
-            elapsed_seconds = time.perf_counter() - start_time
-            print_elapsed_time(elapsed_seconds)
+        solution = None
 
-        agentReq0.print_solution(solution)
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            spec.reset_requirement_relationships()
+            solution = agent_req_0.solve()
+            is_correct, mismatches = spec.check_requirement_solution(
+                solution, requirements_solution
+            )
+        
+            if is_correct:
+                print(
+                    f"\nAGENT FOUND A CORRECT REQUIREMENTS SOLUTION "
+                    f"after {attempt} attempt(s)."
+                )
+                break
+        
+            print(f"Attempt {attempt}: agent solution did not match requirements_solution.csv.")
+        else:
+            print(
+                f"\nAGENT FAILED TO FIND A CORRECT REQUIREMENTS SOLUTION "
+                f"after {MAX_ATTEMPTS} attempts."
+            )
+            if mismatches:
+                print("Example mismatch:", mismatches[0])
+        
+        elapsed_seconds = time.perf_counter() - start_time
+        print_elapsed_time(elapsed_seconds)
+
+        print(f"{agent_req_0.__str__()} solution:")
+        agent_req_0.print_solution(solution)
