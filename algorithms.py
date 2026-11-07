@@ -2,7 +2,6 @@
 This file will contain implementations of each algorithm/agent type.
 '''
 import random
-from node2vec import Node2Vec
 
 class RandomAgent:
   def __str__(self):
@@ -11,6 +10,11 @@ class RandomAgent:
     moves = problem.getLegalMoves()
     return moves[random.randrange(len(moves))]
 
+
+#######################################################################
+# Addition to the template for INFO 450/550.
+# algorithms.py
+#######################################################################
 
 # extending the RandomAgent to solve the crossoword and requirements
 # decomposition problems using a greedy approach.
@@ -24,9 +28,11 @@ class GreedyRandomAgent(RandomAgent):
     self.spec = None
     self.model = None
 
+
   def set_puzzle(self, puzzle):
     self.puzzle = puzzle
     self.model = None
+
 
   def set_spec(self, spec):
     self.spec = spec
@@ -58,6 +64,8 @@ class GreedyRandomAgent(RandomAgent):
 
     self.model = node2vec.fit(window=10, min_count=1)
 
+
+  # this will check if the candidate word is consistent with the already assigned neighboring slots in the crossword puzzle
   def crossword_is_consistent(self, problem, slot_id, word):
     # check whether a candidate word agrees with already assigned neiboring slots
     for neighbor in problem.graph[slot_id]["neighbors"]:
@@ -183,29 +191,25 @@ class GreedyRandomAgent(RandomAgent):
 
 
   # functions for requirements decomposition problem
-
   def decomposition_score(self, problem, child_id, parent_id):
-    score = 0.0
+    child = problem.get_requirement(child_id)
+    parent = problem.get_requirement(parent_id)
+
+    child_words = problem.tokenize_text(child.req_text)
+    parent_words = problem.tokenize_text(parent.req_text)
+
+    overlap = len(child_words & parent_words)
+    score = overlap * 2 # weighting the overlap more heavily
 
     if self.model is not None:
       try:
-        score += self.model.wv.similarity(str(child_id), str(parent_id))
+        score += max(
+          0.0,
+          self.model.wv.similarity(str(child_id), str(parent_id))
+          )
       except KeyError:
         pass
 
-      child = problem.get_requirement(child_id)
-      parent = problem.get_requirement(parent_id)
-
-      child_words = problem.tokenize_text(child.req_text)
-      parent_words = problem.tokenize_text(parent.req_text)
-
-      overlap = len(child_words & parent_words)
-
-      score += max(
-        0,
-        self.model.wv.similarity(str(child_id), str(parent_id))
-      )
-    
     return score
   
 
@@ -216,53 +220,58 @@ class GreedyRandomAgent(RandomAgent):
     unassigned = [
       variable
       for variable in problem.variables
-      if problem.get_requirement(variable).parent is None
+      if len(problem.get_requirement(variable).parents) == 0
     ]
 
     if not unassigned:
       return None
 
-    # mrv heuristic
+    # mrv heuristic.  for optimization. will comment for now to make sure that we are purely using
+    # greedy heuristic for parent selection.  this will be used to select the next child requirement to assign parents to.
+    '''
     child_id = min(
       unassigned,
       key=lambda r:
         len(problem.legal_values(r))
     )
+    '''
 
+    child_id = random.choice(unassigned) # randomly selecting a child requirement to assign parents to.
     candidates = problem.legal_values(child_id)
 
     if not candidates:
       return None
 
     # greedy heuristic
-    scores = {
-      parent_id:
-        self.decomposition_score(problem, child_id, parent_id)
-      for parent_id in candidates
-    }
+    scores = {}
+    for parent_id in candidates:
+      scores[parent_id] = self.decomposition_score(problem, child_id, parent_id)
 
     # best value
     best_score = max(scores.values())
 
-    # random tie-breaking
-    best_parents = [
-      parent_id
+    # allow for some flexibility in parent selection, not just the absolute best
+    # if the agent is assigning to many parents, this needs to be adjust to higher value
+    threshold = best_score * 0.9
 
+    chosen_parents = [
+      parent_id
       for parent_id, score in scores.items()
-      if score == best_score
+      if score >= threshold
     ]
 
-    chosen_parent = random.choice(best_parents)
-
-    return child_id, chosen_parent
+    return child_id, chosen_parents
 
 
-  def apply_decomposition_move(self, problem, child_id, parent_id):
+  # this will apply the decomposition move to the specification requirements
+  def apply_decomposition_move(self, problem, child_id, parent_ids):
     child = problem.get_requirement(child_id)
-    parent = problem.get_requirement(parent_id)
 
-    if child and parent:
-      child.add_parent(parent)
+    for parent_id in parent_ids:
+      parent = problem.get_requirement(parent_id)
+
+      if child and parent:
+        child.add_parent(parent)
 
 
   def solve(self):
@@ -280,11 +289,11 @@ class GreedyRandomAgent(RandomAgent):
       if move is None:
         break
 
-      child_id, parent_id = move
+      child_id, parent_ids = move
 
-      self.apply_decomposition_move(self.spec, child_id, parent_id)
+      self.apply_decomposition_move(self.spec, child_id, parent_ids)
 
-      assignment[child_id] = parent_id
+      assignment[child_id] = set(parent_ids)
 
     return assignment
 
@@ -292,32 +301,26 @@ class GreedyRandomAgent(RandomAgent):
   def print_solution(self, assignment):
       print("\nRequirement Decomposition Solution:\n")
   
-      for req_id, parent_id in assignment.items():
+      for req_id, parent_ids in assignment.items():
         req = self.spec.get_requirement(req_id)
   
-        if parent_id is None:
+        if parent_ids is None:
           print(
             f"{req.req_id} "
             f"({req.req_level}) "
             f"-> ROOT"
           )
         else:
-          parent = self.spec.get_requirement(parent_id)
+          parent_list = sorted(parent_ids)
+
           print(
-            f"{req.req_id} "
-            f"({req.req_level}) "
-            f"-> "
-            f"{parent.req_id} "
-            f"({parent.req_level})"
+            f"{req.req_id} ->"
+            f" {', '.join(parent_list)}"
           )
 
 
-
-#######################################################################
-# Addition to the template for INFO 450/550.
-# algorithms.py
-#######################################################################
-
+# Node2Vec implementation
+from node2vec import Node2Vec
 import numpy as np
 
 # compute cosine similarity between two vectors
@@ -518,14 +521,18 @@ class Node2VecCSPAgent(Node2VecAgent):
   def is_complete(self, assignment):
     return len(assignment) == len(self.puzzle.slots)
 
+
   def is_consistent(self, slot_id, word, assignment):
     return super()._is_consistent(slot_id, word, assignment)
+
 
   def order_domain_values(self, slot_id):
     return [word for word, _ in self._rank_candidates(slot_id)]
 
+
   def select_unassigned_variable(self, assignment):
     return super().select_unassigned_slot(assignment)
+
 
   # modified function for solving the specification decomposition problem. this will be used for the requirements decomposition problem.
   # this gives an MRV heuristics directly on requirements
@@ -536,7 +543,13 @@ class Node2VecCSPAgent(Node2VecAgent):
       if req_id not in assignment
     ]
 
-    return min(unassigned, key=lambda req_id: len(domains[req_id]))
+    return min(
+      unassigned,
+      key=lambda req_id: (
+        len(domains[req_id]),
+        -len(self.spec.G[req_id]) # tie-breaker: prefer requirements with more children
+      )
+    )
 
 
 # extention of the Node2VecAgent with backtracking search and forward checking to find a solution to the crossword puzzle.
@@ -824,6 +837,7 @@ class Node2VecRequirementCSPAgent:
     return len(assignment) == len(self.csp["variables"])
 
 
+  # this will score the similarity between a child requirement and a parent requirement based on their embeddings
   def score_parent(self, req_id, parent_id):
     try:
       return self.model.wv.similarity(str(req_id), str(parent_id))
@@ -831,6 +845,7 @@ class Node2VecRequirementCSPAgent:
       return 0.0
 
 
+  # orders the domain values (parent requirements) for a given child requirement based on their similarity scores
   def order_domain_values(self, req_id, domains):
     ranked = []
 
@@ -847,26 +862,26 @@ class Node2VecRequirementCSPAgent:
     return [parent_id for parent_id, _ in ranked]
 
 
-  # selects the next unassigned variable based on MRV heuristic
-  def select_unassigned_variable(self, assignment, domains):
-    unassigned = [
-      req_id
-      for req_id in self.csp["variables"]
-      if req_id not in assignment
-    ]
-
-    return min(unassigned, key=lambda req_id: len(domains[req_id]))
-
-
   # checks if adding the parent_id to the assignment for req_id would create a cycle in the assignment graph
   def creates_cycle(self, req_id, parent_id, assignment):
-    current = parent_id
+    pending = [parent_id]
+    visited = set()
 
-    while current is not None:
+    while pending:
+      current = pending.pop()
+
+      if current is None or current in visited:
+        continue
+
       if current == req_id:
         return True
-      
-      current = assignment.get(current)
+
+      visited.add(current)
+      assigned_parents = assignment.get(current, set())
+      if isinstance(assigned_parents, str):
+        assigned_parents = {assigned_parents}
+
+      pending.extend(assigned_parents)
 
     return False
 
@@ -889,7 +904,7 @@ class Node2VecRequirementCSPAgent:
       if parent.req_level != "System":
         return False
     elif child.req_level == "Component":
-      if parent.req_level !="Subsystem":
+      if parent.req_level not in ["Subsystem", "Non-Functional"]:
         return False
     elif child.req_level == "Non-Functional":
       if parent.req_level not in ["System", "Subsystem", "Component"]:
@@ -900,49 +915,58 @@ class Node2VecRequirementCSPAgent:
 
   # applies the assignment of parent-child relationships to the specification requirements
   def apply_decomposition(self, assignment):
-    # clear the existing parent-child relationships
+    # clear any existing parent-child relationships in the requirements before applying the new assignment
     for req in self.spec.requirements.values():
-      req.parent = None
-      req.children = []
+        req.parents.clear()
+        req.children.clear()
 
-    # build new hierarchy based on the assignment
-    for req_id, parent_id in assignment.items():
+    # allows the new decomposition
+    for req_id, parent_ids in assignment.items():
+        if parent_ids is None:
+            continue
 
-      if parent_id is None:
-        continue
+        if isinstance(parent_ids, str):
+          parent_ids = {parent_ids}
 
-      child = self.spec.get_requirement(req_id)
-      parent = self.spec.get_requirement(parent_id)
+        child = self.spec.get_requirement(req_id)
+        if child is None:
+          continue
 
-      child.add_parent(parent)
+        for parent_id in parent_ids:
+          parent = self.spec.get_requirement(parent_id)
+          if parent is not None:
+            child.add_parent(parent)
 
 
   def print_solution(self, assignment):
     print("\nRequirement Decomposition Solution:\n")
 
-    for req_id, parent_id in assignment.items():
+    for req_id, parent_ids in assignment.items():
       req = self.spec.get_requirement(req_id)
 
-      if parent_id is None:
+      if not parent_ids:
         print(
-          f"{req.req_id} "
-          f"({req.req_level}) "
-          f"-> ROOT"
+          f"{req.req_id} -> ROOT"
         )
       else:
-        parent = self.spec.get_requirement(parent_id)
-        print(
-          f"{req.req_id} "
-          f"({req.req_level}) "
-          f"-> "
-          f"{parent.req_id} "
-          f"({parent.req_level})"
+        if isinstance(parent_ids, str):
+          parent_ids = {parent_ids}
+
+        parents = [
+          self.spec.get_requirement(parent_id)
+          for parent_id in sorted(parent_ids)
+        ]
+        parent_text = ", ".join(
+          parent.req_id
+          for parent in parents
+          if parent is not None
         )
+        print(f"{req.req_id} -> {parent_text}")
 
 
 # agent for requirements decomposition problem. this will be used to solve the requirements decomposition problem using the node2vec embeddings
 # this agent will use only the bactracking with forward checking functions
-class Node2VecRequirementsDecompositionAgent(Node2VecRequirementCSPAgent):
+class Node2VecRequirementsBacktrackingWithForwardCheckingAgent(Node2VecRequirementCSPAgent):
   def __str__(self):
     return "Node2Vec Requirements Decomposition Agent using Backtracking with Forward Checking"
 
@@ -951,27 +975,89 @@ class Node2VecRequirementsDecompositionAgent(Node2VecRequirementCSPAgent):
     self.solution = None
 
 
+  # setting the child parent size limit
+  def constraint_parent_count(self, parent_ids):
+    return len(parent_ids) <= 13
+
+  # this will select the next unassigned requirement to assign parents to.
+  def select_unassigned_variable(self, assignment, domains):
+    unassigned = []
+
+    for req_id in self.csp["variables"]:
+      if req_id not in assignment:
+        unassigned.append(req_id)
+
+    return unassigned[0] if unassigned else None
+
+
   # forward checking for the requirements decomposition problem
   # since the consistency checker already identifies the cycles, we can 
   # prune any domain value that would create one
-  def requirements_forward_checking(self, req_id, parent_id, assignment, domains):
-    for variable in domains:
+  def requirements_forward_checking(self, assignment, domains):
+    for variable in self.csp["variables"]:
       if variable in assignment:
         continue
 
-      new_domain = []
+      filtered = []
 
-      for candiate_parent in domains[variable]:
-        if self.is_consistent(variable, candiate_parent, assignment):
-          new_domain.append(candiate_parent)
+      for candidate_parent in domains[variable]:
+        if self.is_consistent(variable, candidate_parent, assignment):
+          filtered.append(candidate_parent)
 
-      domains[variable] = new_domain
+      domains[variable] = filtered
 
-      # domain wipeout
-      if len(new_domain) == 0:
+      if len(filtered) == 0:
         return False
 
     return True
+
+
+  # this will order the parent sets for a given requirement based on their similarity scores
+  # the requirement solution has a child with upto 13 parents
+  # the agent is strugling to find the correct parent sets for each requirement because it has to consider many possible combinations of parents
+  # its making large search spaces for the agent to explore
+  def order_parent_sets(self, req_id, domains):
+    ranked = []
+
+    for parent_id in domains[req_id]:
+      if parent_id is None:
+        continue
+
+      score = self.score_parent(req_id, parent_id)
+      ranked.append((parent_id, score))
+
+    ranked.sort(key=lambda item: item[1], reverse=True)
+
+    # ranks the parents based on their scores and returns a list of sets of parent_ids,
+    # starting with the highest-scoring parent, then the top two, then the top three, etc.
+    if not ranked:
+      return []
+
+    ranked_parents = []
+    for parent_id, score in ranked:
+      if parent_id is not None:
+        ranked_parents.append(parent_id)
+
+    ordered_parent_sets = []
+    current_set = set()
+
+    for parent_id in ranked_parents:
+      current_set.add(parent_id)
+      ordered_parent_sets.append(set(current_set))
+
+    # try to return the largest parent set first
+    #ordered_parent_sets.reverse()
+
+    # sort the parents based on the size of the parent set and the total similarity score
+    ordered_parent_sets.sort(
+      key=lambda parent_set: (
+        len(parent_set),
+        sum(self.score_parent(req_id, parent_id) for parent_id in parent_set)
+      ),
+      reverse=True
+    )
+
+    return ordered_parent_sets
 
   
   def requirement_backtracking_with_forward_checking(self, assignment, domains):
@@ -980,25 +1066,37 @@ class Node2VecRequirementsDecompositionAgent(Node2VecRequirementCSPAgent):
 
     req_id = self.select_unassigned_variable(assignment, domains)
 
-    for parent_id in self.order_domain_values(req_id, domains):
-      if self.is_consistent(req_id, parent_id, assignment):
-        assignment[req_id] = parent_id
+    for parent_ids in self.order_parent_sets(req_id, domains):
+
+      # applying the constraint on the number of parents
+      if not self.constraint_parent_count(parent_ids):
+        continue
+
+      if all(
+        self.is_consistent(req_id, parent_id, assignment)
+        for parent_id in parent_ids
+      ):
+
+        # for debugging. prints the current requirement and the parent set being tested
+        #print(f"Testing {req_id} with parent set {sorted(parent_ids)}")
+        
+        assignment[req_id] = set(parent_ids)
+
         saved_domains = {
           var: list(values)
           for var, values in domains.items()
         }
 
-        if self.requirements_forward_checking(req_id, parent_id, assignment, domains):
+        if self.requirements_forward_checking(assignment, domains):
           result = self.requirement_backtracking_with_forward_checking(assignment, domains)
 
           if result is not None:
             return result
 
         del assignment[req_id]
-
         domains.clear()
         domains.update(saved_domains)
-
+    
     return None
 
 
@@ -1021,3 +1119,21 @@ class Node2VecRequirementsDecompositionAgent(Node2VecRequirementCSPAgent):
       self.apply_decomposition(solution)
 
     return solution
+
+
+# agent for requirements using only conflict-directed backjumping with no-good learning
+class Node2VecRequirementsConflictDirectedBackjumpingWithNoGoodLearningAgent(Node2VecRequirementCSPAgent):
+  def __str__(self):
+    return "Node2Vec Requirements Decomposition Agent using Conflict-Directed Backjumping with No-Good Learning"
+
+  def __init__(self, specification):
+    super().__init__(specification)
+    self.solution = None
+    self.no_goods = set()
+    self.conflict_sets = {
+      req_id: set() for req_id in self.spec.requirements
+    }
+    self.no_good_hits = 0
+    self.no_goods_learned = 0
+
+  # need to work on this

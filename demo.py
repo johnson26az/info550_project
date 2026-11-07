@@ -31,22 +31,22 @@ from crosswords.puzzle02 import crossword as crossword02
 
 from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
 
-from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent, Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent
-from algorithms import Node2VecRequirementsDecompositionAgent
 from algorithms import GreedyRandomAgent
+from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent, Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent
+from algorithms import Node2VecRequirementsBacktrackingWithForwardCheckingAgent
 
 from problems import Specification
 
 from pathlib import Path
 
-IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Node2Vec agent
+IS_RANDOM_AGENT = True # set to True to run the random agent else False to run the Node2Vec agent
 SOLVE_CROSSWORD = False # set to True to run the crossword puzzle else False to run the requirements problem
 INPUT_FILE_NAME = 'requirements_only.csv'
 INPUT_FILE = Path(__file__).parent / "data" / INPUT_FILE_NAME
 REQ_SOLUTION_NAME = 'requirements_solution.csv'
 REQ_SOLUTION_FILE = Path(__file__).parent / "data" / REQ_SOLUTION_NAME
 
-MAX_ATTEMPTS = 100
+MAX_ATTEMPTS = 1000
 
 # supporting functions in the demo.py file
 def print_elapsed_time(elapsed_seconds):
@@ -225,7 +225,7 @@ else:
         #spec.print_graph()
 
         # creating the agent
-        agent_req_0 = Node2VecRequirementsDecompositionAgent(spec)
+        agent_req_0 = Node2VecRequirementsBacktrackingWithForwardCheckingAgent(spec)
         print(f"Running {agent_req_0.__str__()}...")
 
         # adding timer for solving the requirement decomposition problem

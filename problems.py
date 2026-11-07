@@ -425,19 +425,19 @@ class Requirement:
       self.req_level = req_level  # this will be set when building the decomposition tree
 
       # structure for the relationships
-      self.parent = None  # this will hold the parent requirement
-      self.children = []
+      self.parents = set()
+      self.children = set()
 
 
    def add_parent(self, parent):
-      if parent and self.parent is None:
-         self.parent = parent
+      if parent and parent not in self.parents:
+         self.parents.add(parent)
          parent.add_child(self)  # ensure the parent also knows about this child
 
 
    def add_child(self, child):
       if child not in self.children:
-         self.children.append(child)
+         self.children.add(child)
 
 
    def infer_level(self):
@@ -550,19 +550,24 @@ class Specification:
 
    # constraint to ensure there are no cycles in the parent-child relationships
    def constraint_no_cycle(self, child_id, parent_id):
-      current = parent_id
+      stack = [parent_id]
+      visited = set()
 
-      while current is not None:
+      while stack:
+         current = stack.pop()
+
          if current == child_id:
-            return False
+            return False  # cycle detected
 
-         req = self.get_requirement(current)
+         if current in visited:
+            continue
 
-         if req is None or req.parent is None:
-            break
+         visited.add(current)
+         current_req = self.get_requirement(current)
 
-         current = req.parent.req_id
-
+         if current_req:
+            stack.extend(parent.req_id for parent in current_req.parents)
+      
       return True
 
 
@@ -625,7 +630,7 @@ class Specification:
          return [
             other.req_id
             for other in self.requirements.values()
-            if other.req_level == "Subsystem"
+            if other.req_level in ["Subsystem", "Non-Functional"]
          ]
       elif req.req_level == "Non-Functional":
          return [
@@ -704,67 +709,83 @@ class Specification:
    # funcions for checking the solution against the correct solution
    # load correct solution from a CSV file
    def load_correct_solution(self, solution_file):
-    expected_parents = {}
+      expected_parents = {}
 
-    with open(solution_file, newline="", encoding="utf-8-sig") as csvfile:
-        reader = csv.DictReader(csvfile)
-        if reader.fieldnames:
+      with open(solution_file, newline="", encoding="utf-8-sig") as csvfile:
+         reader = csv.DictReader(csvfile)
+
+         if reader.fieldnames:
             reader.fieldnames = [
-                field.lstrip("\ufeff") for field in reader.fieldnames
+               field.lstrip("\ufeff")
+               for field in reader.fieldnames
             ]
 
-        for row in reader:
+         for row in reader:
             requirement_id = row["Requirements ID"].strip()
             parent_text = row["Parent Requirement"].strip()
+
             if not parent_text:
-                continue
+               continue
 
             parent_ids = set()
+
             for parent in parent_text.split(","):
-                parent = parent.strip()
-                range_match = re.fullmatch(
-                    r"([A-Za-z]+)(\d+)\s*[-–]\s*([A-Za-z]+)(\d+)",
-                    parent,
-                )
-                if range_match and range_match.group(1) == range_match.group(3):
-                    prefix = range_match.group(1)
-                    start = int(range_match.group(2))
-                    end = int(range_match.group(4))
-                    parent_ids.update(
-                        f"{prefix}{number:02d}" for number in range(start, end + 1)
-                    )
-                else:
-                    parent_ids.add(parent)
+               parent = parent.strip()
+
+               range_match = re.fullmatch(
+                  r"([A-Za-z]+)(\d+)\s*[-–]\s*([A-Za-z]+)(\d+)",
+                  parent
+               )
+
+               if range_match and range_match.group(1) == range_match.group(3):
+                  prefix = range_match.group(1)
+                  start = int(range_match.group(2))
+                  end = int(range_match.group(4))
+
+                  parent_ids.update(
+                     f"{prefix}{number:02d}"
+                     for number in range(start, end + 1)
+                  )
+               else:
+                  parent_ids.add(parent)
 
             expected_parents[requirement_id] = parent_ids
 
-    return expected_parents
+      return expected_parents
 
 
    # return whether the agent solution matches the expected solution from the CSV file
    def check_requirement_solution(self, agent_solution, correct_solution):
-    """Return whether every generated parent is allowed by the solution CSV."""
-    mismatches = []
+      mismatches = []
 
-    for requirement_id, allowed_parents in correct_solution.items():
-        actual_parent = agent_solution.get(requirement_id)
-        if actual_parent not in allowed_parents:
+      for requirement_id, allowed_parents in correct_solution.items():
+         actual_parent = agent_solution.get(requirement_id)
+         if isinstance(actual_parent, str):
+            actual_parents = {actual_parent}
+         else:
+            actual_parents = set(actual_parent or ())
+
+         if actual_parents != allowed_parents:
             mismatches.append(
-                f"{requirement_id}: expected one of {sorted(allowed_parents)}, "
-                f"got {actual_parent}"
+               f"{requirement_id}: "
+               f"expected parents "
+               f"{sorted(allowed_parents)}, "
+               f"got {sorted(actual_parents)}"
             )
 
-    unexpected_requirements = set(agent_solution) - set(correct_solution)
-    for requirement_id in sorted(unexpected_requirements):
-        mismatches.append(
-            f"{requirement_id}: not present as a decomposed requirement in the CSV"
-        )
+      unexpected_requirements = set(agent_solution) - set(correct_solution)
+      
+      for requirement_id in sorted(unexpected_requirements):
+         mismatches.append(
+            f"{requirement_id}: "
+            f"not present in CSV solution"
+         )
 
-    return not mismatches, mismatches
+      return (len(mismatches) == 0, mismatches)
 
 
    # clear requirement relationships
    def reset_requirement_relationships(self):
       for requirement in self.requirements.values():
-         requirement.parent = None
+         requirement.parents.clear()
          requirement.children.clear()
