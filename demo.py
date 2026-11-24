@@ -28,6 +28,8 @@ algorithm and one player uses another. If your problem is snake, you might show 
 
 from crosswords.puzzle01 import crossword as crossword01
 from crosswords.puzzle02 import crossword as crossword02
+from crosswords.puzzle03 import crossword as crossword03
+from crosswords.puzzle04 import crossword as crossword04
 
 from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
 
@@ -39,14 +41,18 @@ from problems import Specification
 
 from pathlib import Path
 
-IS_RANDOM_AGENT = True # set to True to run the random agent else False to run the Node2Vec agent
+# constansts for which agent and problem to run
+IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Node2Vec agent
 SOLVE_CROSSWORD = False # set to True to run the crossword puzzle else False to run the requirements problem
+
+# constants for requirements problem
 INPUT_FILE_NAME = 'requirements_only.csv'
 INPUT_FILE = Path(__file__).parent / "data" / INPUT_FILE_NAME
 REQ_SOLUTION_NAME = 'requirements_solution.csv'
 REQ_SOLUTION_FILE = Path(__file__).parent / "data" / REQ_SOLUTION_NAME
 
-MAX_ATTEMPTS = 1000
+# constants for demo setttings
+MAX_ATTEMPTS = 10
 
 # supporting functions in the demo.py file
 def print_elapsed_time(elapsed_seconds):
@@ -60,12 +66,12 @@ print("\nStarting the demo...\n"\
       f"SOLVE_CROSSWORD: {SOLVE_CROSSWORD}\n")
 
 if IS_RANDOM_AGENT:
-    CORRECT_SOLUTION = [list(row) for row in crossword02["solution_grid"]]
+    CORRECT_SOLUTION = [list(row) for row in crossword03["solution_grid"]]
 
     cw = Crossword(
-        grid = normalize_grid(crossword02["grid"]), # loads the grid
-        clues = crossword02["clues"], # loads the clues
-        word_bank = crossword02["word_bank"]
+        grid = normalize_grid(crossword03["grid"]), # loads the grid
+        clues = crossword03["clues"], # loads the clues
+        word_bank = crossword03["word_bank"]
     )
 
     cw.print_grid()
@@ -134,17 +140,15 @@ if IS_RANDOM_AGENT:
 
     print(f"{random_agent.__str__()} solution:")
     random_agent.print_solution(solution)
-
-
 else:
     if SOLVE_CROSSWORD:
-        CORRECT_SOLUTION = [list(row) for row in crossword02["solution_grid"]]
+        CORRECT_SOLUTION = [list(row) for row in crossword04["solution_grid"]]
         MAX_ATTEMPTS = 10
 
         cw = Crossword(
-            grid = normalize_grid(crossword02["grid"]), # loads the grid
-            clues = crossword02["clues"], # loads the clues
-            word_bank = crossword02["word_bank"]
+            grid = normalize_grid(crossword04["grid"]), # loads the grid
+            clues = crossword04["clues"], # loads the clues
+            word_bank = crossword04["word_bank"]
         )
 
         cw.print_grid()
