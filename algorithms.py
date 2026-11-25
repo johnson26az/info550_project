@@ -319,9 +319,26 @@ class GreedyRandomAgent(RandomAgent):
           )
 
 
-# Node2Vec implementation
-from node2vec import Node2Vec
+'''
+resources for understanding and using the Word2Vec model
+- https://wiki.pathmind.com/word2vec
+- https://www.youtube.com/watch?v=9Rd6sh-PmlY&t=2s
+- https://towardsdatascience.com/word2vec-explained-49c52b4ccb71/
+'''
+
+# Word2Vec implementation
+from gensim.models import Word2Vec
+import gensim.downloader as api
 import numpy as np
+
+model = api.load("word2vec-google-news-300")  # load pre-trained Word2Vec model from Google
+
+#print(api.base_dir)  # prints the directory where the model is stored
+#print(model.most_similar("king", topn=5))  # example usage: find words most similar to "king"
+
+'''
+NOTES: word2vec is good at predicting semantics between two words, once trained. semantic matching.
+'''
 
 # compute cosine similarity between two vectors
 def cosine_similarity(vec1, vec2):
@@ -331,7 +348,7 @@ def cosine_similarity(vec1, vec2):
 
 
 # backtracking algorithm per figure 6.5 in the textbook (page 215).
-# will extend the node2vec agent later.
+# will extend the word2vec agent later.
 def backtracking_search(agent, assignment):
   if len(assignment) == len(agent.puzzle.slots):
     return assignment
@@ -402,18 +419,6 @@ def backtracking_search_with_forward_checking(agent, assignment, domains):
   return None
 
 
-'''
-resources for understanding and using the Node2Vec. 
-  https://www.geeksforgeeks.org/machine-learning/node2vec-algorithm/
-  https://spotintelligence.com/2024/01/18/node2vec/
-
-this will be the agent solving the crossword puzzle. it uses the word bank to generate embeddings for each word and
-then leverages these embeddings to make informed decisions about word placement.
-
-refactored the node2vec agent to be simple and act like a greedy agent. it does not utilize backtracking or any other search strategy.
-it simply selects the next unassigned slot and ranks the candidate words based on their embeddings.
-it then selects the highest-ranked word that is consistent with the current assignment.
-'''
 class Node2VecAgent:
   def __init__(self, puzzle):
     self.puzzle = puzzle
