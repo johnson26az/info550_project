@@ -118,42 +118,37 @@ class TicTacToe:
 #######################################################################
 
 '''
-helper functions
-'''
-# Normalizes the grid to ensure that blocked cells are represented by '#' and empty cells by ' '.
-def normalize_grid(grid):
-   return [
-      [('#' if ch == '#' else ' ') for ch in row]
-      for row in grid
-   ]
-
-
-'''
 Represents the crossword puzzle.
 '''
 class Crossword:
-   def __init__(self, grid, clues, word_bank):
+   def __init__(self, grid, clues):
       self.grid = grid
       self.clues = clues
-      self.word_bank = word_bank
+
       self.rows = len(grid)
       self.cols = len(grid[0])
+
 
    def is_blocked(self, row, col):
       return self.grid[row][col] == '#'
 
-   def get_clue(self, clue_id):
-      return self.clues.get(clue_id)
+
+   def get_clue(self, variable):
+      direction, clue_number = variable
+      return self.clues[direction][clue_number]
+
 
    def set_cell_letter(self, row, col, value):
       if 0 <= row < self.rows and 0 <= col < self.cols:
          self.grid[row][col] = value
 
+
    def print_grid(self):
-      print("\nCROSSWORD PUZZLE")
+      print("\nCROSSWORD PUZZLE\n")
       for row in self.grid:
          print("".join(row))
       print("\n")
+
 
    def print_clues(self):
       print("Clues:\n")
@@ -165,37 +160,24 @@ class Crossword:
       for clue_id, clue in self.clues["down"].items():
          print(f"{clue_id}: {clue}")
 
-   def get_word_bank(self):
-      return self.word_bank
-
 
 class CrosswordPuzzle:
    def __init__(self, crossword):
       self.crossword = crossword
+      self.numbering = {}  # holds the numbering of the slots in the crossword grid
       self.slots = {}  # holds the crossword slots for each clue
-      self.graph = {}  # this will hold the
-      self.domain = {} # will hold the candidate words
+      self.constraint_graph = {}  # this will hold the neighbor slots, intersections, and indices
       self.assignment = {} # will hold the current assignment of words to slots
 
+      self.number_grid()  # number the slots in the crossword grid
       self.extract_slots()
       self.find_intersections()
-      self.build_domain()
-
-      '''
-      # for debugging purposes
-      print("\nDOMAIN CHECK:")
-      for slot_id, domain in self.domain.items():
-         if len(domain) == 0:
-            print(f"EMPTY DOMAIN → {slot_id}")
-         else:
-            print(f"{slot_id}: {len(domain)} candidates")
-      '''
+      self.variables = list(self.slots.keys())  # list of slot IDs for the CSP
 
 
    # extract all the slots from the crossword grid
    def extract_slots(self):
       # logic to extract slots from the crossword grid
-      grid = self.crossword.grid
       rows = self.crossword.rows
       cols = self.crossword.cols
 
@@ -206,22 +188,37 @@ class CrosswordPuzzle:
                not self.crossword.is_blocked(row, col)
                and (col == 0 or self.crossword.is_blocked(row, col - 1))
             )
-            if is_start:
-               start = col
-               end = col
-               while end < cols and not self.crossword.is_blocked(row, end):
-                  end += 1
-               length = end - start
 
-               if length > 1:
-                  slot_id = f"across_{row+1}-{start+1}"
-                  cells = [(row, c) for c in range(start, start + length)]
-                  self.slots[slot_id] = {
-                     "id": slot_id,
-                     "direction": "across",
-                     "cells": cells,
-                     "length": length
-                  }
+            if not is_start:
+               continue
+
+            start = col
+            end = col
+
+            while (end < cols and not self.crossword.is_blocked(row, end)):
+               end += 1
+            
+            length = end - start
+
+            if length <= 1:
+               continue
+
+            clue_number = self.numbering[(row, start)]
+            slot_id = ("across", clue_number)
+
+            cells = [
+               (row, c)
+               for c in range(start, end)
+            ]
+
+            self.slots[slot_id] = {
+               "id": slot_id,
+               "direction": "across",
+               "clue_number": clue_number,
+               "cells": cells,
+               "length": length
+            }
+
       # down slots
       for col in range(cols):
          for row in range(rows):
@@ -229,29 +226,83 @@ class CrosswordPuzzle:
                not self.crossword.is_blocked(row, col)
                and (row == 0 or self.crossword.is_blocked(row - 1, col))
             )
-            if is_start:
-               start = row
-               end = row
-               while end < rows and not self.crossword.is_blocked(end, col):
-                  end += 1
-               length = end - start
 
-               if length > 1:
-                  slot_id = f"down_{start+1}-{col+1}"
-                  cells = [(r, col) for r in range(start, start + length)]
-                  self.slots[slot_id] = {
-                     "id": slot_id,
-                     "direction": "down",
-                     "cells": cells,
-                     "length": length
-                  }
+            if not is_start:
+               continue
+
+            start = row
+            end = row
+
+            while (end < rows and not self.crossword.is_blocked(end, col)):
+               end += 1
+            
+            length = end - start
+
+            if length <= 1:
+               continue
+
+            clue_number = self.numbering[(start, col)]
+            slot_id = ("down", clue_number)
+
+            cells = [
+               (r, col)
+               for r in range(start, end)
+            ]
+
+            self.slots[slot_id] = {
+               "id": slot_id,
+               "direction": "down",
+               "clue_number": clue_number,
+               "cells": cells,
+               "length": length
+            }
+
+
+   # get the slot information for a given variable (slot ID)
+   def get_slot(self, variable):
+      return self.slots.get(variable)
+
+
+   # get the neighbors of a given variable (slot ID) in the constraint graph
+   def get_neighbors(self, variable):
+      return self.constraint_graph[variable]["neighbors"]
+
+
+   def get_intersections(self, variable1, variable2):
+      return self.constraint_graph[variable1]["intersections"][variable2]
+
+
+   # number the slots in the crossword grid for clues.
+   def number_grid(self):
+      self.numbering = {}
+
+      clue_number = 1
+
+      for row in range(self.crossword.rows):
+         for col in range(self.crossword.cols):
+            if self.crossword.is_blocked(row, col):
+               continue
+
+            start_across = (
+               col == 0 or self.crossword.is_blocked(row, col - 1)
+            )
+               
+            start_down = (
+               row == 0 or self.crossword.is_blocked(row - 1, col)
+            )
+
+            if start_across or start_down:
+               self.numbering[(row, col)] = clue_number
+               clue_number += 1
 
 
    # find intersections between slots and build the graph structure.
    def find_intersections(self):
       # initializing the graph structure
+      self.constraint_graph = {}
+
       for slot_id in self.slots:
-         self.graph[slot_id] = {
+         self.constraint_graph[slot_id] = {
             "neighbors": [],
             "intersections": {} # this will be the intersections with other slots
          }
@@ -274,86 +325,40 @@ class CrosswordPuzzle:
                   index2 = cells2.index(cell1)
 
                   # record the neighbor relationship
-                  self.graph[s1]["neighbors"].append(s2)
-                  self.graph[s2]["neighbors"].append(s1)
+                  self.constraint_graph[s1]["neighbors"].append(s2)
+                  self.constraint_graph[s2]["neighbors"].append(s1)
 
                   # record the intersection index pair
-                  self.graph[s1]["intersections"][s2] = (index1, index2)
-                  self.graph[s2]["intersections"][s1] = (index2, index1)
+                  self.constraint_graph[s1]["intersections"][s2] = (index1, index2)
+                  self.constraint_graph[s2]["intersections"][s1] = (index2, index1)
 
 
-   # builds the domain for each slot based on the word bank and the crossword grid.
-   def build_domain(self):
-      word_bank = self.crossword.word_bank
+   def validate_slots(self):
+      clue_ids = {
+         (direction, clue_number)
+         for direction, clues in self.crossword.clues.items()
+         for clue_number in clues
+      }
+      slot_ids = set(self.slots)
+      clue_count = (
+         len(self.crossword.clues["across"]) +
+         len(self.crossword.clues["down"])
+      )
 
-      for slot_id, slot in self.slots.items():
-         length = slot["length"]
-         cells = slot["cells"]
+      slot_count = len(slot_ids)
 
-         candidates = []
-         for word in word_bank:
-            if len(word) != length:
-               continue
+      print(f"Number of clues: {clue_count}")
+      print(f"Number of slots: {slot_count}")
 
-            fits = True
+      clues_without_slots = clue_ids - slot_ids
+      slots_without_clues = slot_ids - clue_ids
+      if clues_without_slots:
+         print(f"Clues without slots: {sorted(clues_without_slots)}")
+      if slots_without_clues:
+         print(f"Slots without clues: {sorted(slots_without_clues)}")
 
-            for (row, col), letter in zip(cells, word):
-               grid_letter = self.crossword.grid[row][col]
+      return clue_ids == slot_ids
 
-               # only reject if the grid has a FIXED letter that doesn't match the candidate word
-               if grid_letter not in ['#', ' '] and grid_letter != letter:
-                  fits = False
-                  break
-
-            if fits:
-               candidates.append(word)
-
-         self.domain[slot_id] = candidates
-
-
-   def print_graph(self):
-      print("\nCROSSWORD STRUCTURE\n")
-      for slot_id, data in self.graph.items():
-         print(f"Slot ID: {slot_id}")
-         print(f"  Neighbors: {data['neighbors']}")
-         print(f"  Intersections: {data['intersections']}")
-
-
-   # important for building the crossword graph structure.
-   # this is used by the Node2Vec agent to build the graph for embedding
-   def build_graph(self):
-      G = nx.Graph()
-
-      # add nodes for each slot
-      for slot_id, slot in self.slots.items():
-         G.add_node(slot_id, type = "word", length = slot["length"])
-
-      # add word nodes
-      for word in self.crossword.word_bank:
-         G.add_node(word, type = "word", length = len(word))
-
-      # slot <=> word edges
-      for slot_id, slot in self.slots.items():
-         for word in self.crossword.word_bank:
-            if len(word) == slot["length"]:
-               G.add_edge(slot_id, word, weight = 1.0)
-
-      # slot <=> slot edges (intersections)
-      for s1, data in self.graph.items():
-         for s2, (i1, i2) in data["intersections"].items():
-            G.add_edge(s1, s2, weight = 2.0)
-
-      # word <=> word edges (shared letters)
-      words = self.crossword.word_bank
-
-      for w1 in words:
-         for w2 in words:
-            if w1 != w2:
-               shared = sum(1 for a, b in zip(w1, w2) if a == b)
-               if shared > 0:
-                  G.add_edge(w1, w2, weight = shared)
-
-      self.G = G
 
    # check if the current assignment matches the correct solution
    def match_solution_grid(self, correct_solution):
@@ -362,6 +367,24 @@ class CrosswordPuzzle:
             if self.crossword.grid[r][c] != correct_solution[r][c]:
                return False
       return True
+
+
+   # debug function to print the slots in the crossword puzzle
+   def print_slots(self):
+      print("\nCROSSWORD SLOTS\n")
+      for slot_id, slot in self.slots.items():
+         clue = self.crossword.get_clue(slot_id)
+         print(f"Slot ID: {slot_id}")
+         print(f"  Clue: {clue}")
+
+
+   # debug function to print the constraint graph
+   def print_constraint_graph(self):
+      print("\nCONSTRAINT GRAPH\n")
+      for slot_id, data in self.constraint_graph.items():
+         print(f"Slot ID: {slot_id}")
+         print(f"  Neighbors: {data['neighbors']}")
+         print(f"  Intersections: {data['intersections']}\n")
 
 
 class PuzzleGame:

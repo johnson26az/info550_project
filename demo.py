@@ -31,19 +31,19 @@ from crosswords.puzzle02 import crossword as crossword02
 from crosswords.puzzle03 import crossword as crossword03
 from crosswords.puzzle04 import crossword as crossword04
 
-from problems import Crossword, CrosswordPuzzle, PuzzleGame, normalize_grid
+from problems import Crossword, CrosswordPuzzle, PuzzleGame
 
 from algorithms import GreedyRandomAgent
-from algorithms import Node2VecAgent, Node2VecBacktrackingWithForwardCheckingAgent, Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent
-from algorithms import Node2VecRequirementsBacktrackingWithForwardCheckingAgent
+from algorithms import Word2VecAgent
+#from algorithms import Node2VecRequirementsBacktrackingWithForwardCheckingAgent
 
 from problems import Specification
 
 from pathlib import Path
 
 # constansts for which agent and problem to run
-IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Node2Vec agent
-SOLVE_CROSSWORD = False # set to True to run the crossword puzzle else False to run the requirements problem
+IS_RANDOM_AGENT = False # set to True to run the random agent else False to run the Word2Vec agent
+SOLVE_CROSSWORD = True # set to True to run the crossword puzzle else False to run the requirements problem
 
 # constants for requirements problem
 INPUT_FILE_NAME = 'requirements_only.csv'
@@ -60,6 +60,41 @@ def print_elapsed_time(elapsed_seconds):
     print(f"Elapsed time: {elapsed_seconds / 60:.2f} minutes\n")
 
 
+def test_word2vec_agent():
+    print("\nTesting Word2VecAgent...")
+
+    crossword = Crossword(
+        grid = crossword02["grid"], # loads the grid
+        clues = crossword02["clues"], # loads the clues
+    )
+
+    puzzle = CrosswordPuzzle(crossword)
+
+    # verifying the numbering and slots
+    print("\n====VALIDATION=====")
+    print("slots valid:",
+          puzzle.validate_slots())
+
+    agent = Word2VecAgent(puzzle)
+
+    print("\n====DOMAIN GENERATION TEST=====")
+    for variable in puzzle.variables:
+        clue = crossword.get_clue(variable)
+
+        print("\n-------------------------")
+        print(f"Variable: {variable}")
+        print(f"Clue: {clue}")
+
+        domain = agent.domains[variable]
+
+        print(f"Domain size: {len(domain)}")
+
+        print("\nTop Candidates:")
+        for word, score in domain[:10]:  # print top 10 candidates
+            print(f"{word}: {score:.4f}")
+
+
+
 print("\nStarting the demo...\n"\
       "Current set up is: \n"\
       f"IS_RANDOM_AGENT: {IS_RANDOM_AGENT}\n"\
@@ -69,7 +104,7 @@ if IS_RANDOM_AGENT:
     CORRECT_SOLUTION = [list(row) for row in crossword03["solution_grid"]]
 
     cw = Crossword(
-        grid = normalize_grid(crossword03["grid"]), # loads the grid
+        grid = Crossword.normalize_grid(crossword03["grid"]), # loads the grid
         clues = crossword03["clues"], # loads the clues
         word_bank = crossword03["word_bank"]
     )
@@ -142,40 +177,25 @@ if IS_RANDOM_AGENT:
     random_agent.print_solution(solution)
 else:
     if SOLVE_CROSSWORD:
-        CORRECT_SOLUTION = [list(row) for row in crossword04["solution_grid"]]
+        CORRECT_SOLUTION = [list(row) for row in crossword02["solution_grid"]]
         MAX_ATTEMPTS = 10
 
+        # testing calls
+        test_word2vec_agent()
+
+        # creating the crossword puzzle object
         cw = Crossword(
-            grid = normalize_grid(crossword04["grid"]), # loads the grid
-            clues = crossword04["clues"], # loads the clues
-            word_bank = crossword04["word_bank"]
+            grid = Crossword.normalize_grid(crossword02["grid"]), # loads the grid
+            clues = crossword02["clues"], # loads the clues
         )
 
         cw.print_grid()
         #cw.print_clues()
 
-        # making a graph representation of the crossword puzzle
         puzzle = CrosswordPuzzle(cw)
-        puzzle.build_graph()
-        #puzzle.print_graph()
+
         
         '''
-        # for testing the Node2VecAgent on the crossword puzzle
-        agent = Node2VecAgent(puzzle)
-
-        print(f"Running {agent.__str__()}...")
-        game = PuzzleGame(puzzle, agent, MAX_ATTEMPTS, CORRECT_SOLUTION)
-        game.solve_the_puzzle()
-
-        # adding timer for solving the puzzle
-        start_time = time.perf_counter()
-        try:
-            game.solve_the_puzzle()
-        finally:
-            elapsed_seconds = time.perf_counter() - start_time
-            print_elapsed_time(elapsed_seconds)
-        '''
-
         # running the Node2VecBacktrackingWithForwardCheckingAgent on the same puzzle
         agent2 = Node2VecBacktrackingWithForwardCheckingAgent(puzzle)
         print(f"Running {agent2.__str__()}...")
@@ -203,6 +223,8 @@ else:
         finally:
             elapsed_seconds = time.perf_counter() - start_time
             print_elapsed_time(elapsed_seconds)
+
+    '''
 
     else:
         # for requirements problem

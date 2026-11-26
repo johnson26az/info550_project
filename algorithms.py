@@ -319,34 +319,7 @@ class GreedyRandomAgent(RandomAgent):
           )
 
 
-'''
-resources for understanding and using the Word2Vec model
-- https://wiki.pathmind.com/word2vec
-- https://www.youtube.com/watch?v=9Rd6sh-PmlY&t=2s
-- https://towardsdatascience.com/word2vec-explained-49c52b4ccb71/
-'''
-
-# Word2Vec implementation
-from gensim.models import Word2Vec
-import gensim.downloader as api
-import numpy as np
-
-model = api.load("word2vec-google-news-300")  # load pre-trained Word2Vec model from Google
-
-#print(api.base_dir)  # prints the directory where the model is stored
-#print(model.most_similar("king", topn=5))  # example usage: find words most similar to "king"
-
-'''
-NOTES: word2vec is good at predicting semantics between two words, once trained. semantic matching.
-'''
-
-# compute cosine similarity between two vectors
-def cosine_similarity(vec1, vec2):
-  cosine_similarity = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-  
-  return cosine_similarity
-
-
+# make a class for crossword puzzle algorithms
 # backtracking algorithm per figure 6.5 in the textbook (page 215).
 # will extend the word2vec agent later.
 def backtracking_search(agent, assignment):
@@ -419,16 +392,120 @@ def backtracking_search_with_forward_checking(agent, assignment, domains):
   return None
 
 
-class Node2VecAgent:
+'''
+resources for understanding and using the Word2Vec model
+- https://wiki.pathmind.com/word2vec
+- https://www.youtube.com/watch?v=9Rd6sh-PmlY&t=2s
+- https://towardsdatascience.com/word2vec-explained-49c52b4ccb71/
+'''
+
+# Word2Vec implementation
+import gensim.downloader as api
+import numpy as np
+import re
+import os
+
+from crosswords.puzzle01 import crossword as test_crossword
+
+TRIMMED_MODEL = "crossword_word2vec_trimmed.kv"
+
+
+'''
+class that implements a Word2Vec agent with base functionalities.
+NOTES: word2vec is good at predicting semantics between two words, once trained. semantic matching.
+'''
+class Word2VecAgent:
   def __init__(self, puzzle):
     self.puzzle = puzzle
-    self.model = None
+    # loading the pre-trained Word2Vec model from Google News dataset
+    self.model = self.load_model()
+    self.clue_vectors = {} # store the clue vectors for each clue in the puzzle
+    self.domains = {} # store the domains for each slot in the puzzle
+
+    # pre-compute the clue vectors for each clue in the puzzle
+    for direction, clues in self.puzzle.crossword.clues.items():
+      # compute the vector representation for each clue and store it in the clue_vectors dictionary
+      for clue_number, clue_text in clues.items():
+        variable = (direction, clue_number)
+        slot_length = self.puzzle.slots[variable]["length"]
+
+        self.clue_vectors[(direction, clue_number)] = (self.clue_to_vector(clue_text))
+
+        # initializing the domains for each slot in the puzzle
+        self.domains[variable] = self.generate_domains_for_single_clue(clue_text, slot_length)
 
 
   def __str__(self):
-    return "Node2Vec Agent"
+    return "Word2Vec Agent"
 
 
+  # loading the pre-trained Word2Vec model from Google News dataset
+  @staticmethod
+  def load_model():
+    model_folder = os.path.join(api.BASE_DIR, "word2vec-google-news-300")
+
+    if os.path.exists(model_folder):
+      print(f"Word2Vec model already exists at {model_folder}.")
+    else:
+      print("Downloading Word2Vec model from Google News dataset...")
+      api.load("word2vec-google-news-300", return_path=True)
+
+    return api.load("word2vec-google-news-300")
+
+
+  # compute cosine similarity between two vectors
+  @staticmethod
+  def cosine_similarity(vec1, vec2):
+    cosine_similarity = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+  
+    return cosine_similarity
+
+
+  # function to convert a clue into a vector representation using the Word2Vec model
+  # returns the average vector of the words in the clue, or a zero vector if none of the words are in the model's vocabulary.
+  def clue_to_vector(self, clue):
+    words = re.findall(r'\b\w+\b', clue.lower())  # tokenize the clue into words, ignoring punctuation and case
+
+    vectors = [
+      self.model[word]
+      for word in words
+      if word in self.model
+    ]
+
+    if not vectors:
+      return np.zeros(self.model.vector_size)
+
+    return np.mean(vectors, axis=0)
+
+
+  # getting the top most similar words to a given clue based on the Word2Vec model
+  # this uses gensim's built-in search for the most similar words in the model's vocabulary based on the clue vector.
+  def get_top_candidates(self, clue, top_n=100):
+    clue_vector = self.clue_to_vector(clue)
+
+    # if the clue vector is zero (i.e., none of the words in the clue are in the model's vocabulary), return an empty list
+    if np.linalg.norm(clue_vector) == 0:
+      return []
+
+    # return the top N most similar words to the clue vector using the Word2Vec model
+    top_words = self.model.similar_by_vector(clue_vector, topn=top_n)
+    
+    return top_words
+
+
+  # generating the domains for a signel clue based on the clue text and the slot length.
+  # this will be used to generate the domains for each slot in the puzzle.
+  def generate_domains_for_single_clue(self, clue, slot_length, top_n=100):
+    candidates = self.get_top_candidates(clue, top_n)
+    return candidates
+
+  # reserve for generating the domains for all clues in the puzzle. this will be used to generate the domains for each slot in the puzzle.
+  def initialize_domains(self):
+    return None
+
+
+
+'''
   # abstract interface that returns a single move for the agent to make. this will be used by the problem to get the next move from the agent.
   def get_move(self, problem):
     # ensuring the graph exists
@@ -451,30 +528,14 @@ class Node2VecAgent:
     return None # no consistent found
 
 
-  # train the Node2Vec embeddings
-  def _train_embedding(self):  
-    if not hasattr(self.puzzle, "G"):
-      raise ValueError("The puzzle graph is not built.")
-
-    node2vec = Node2Vec(
-      self.puzzle.G,
-      dimensions = 128, # embedding dimension
-      walk_length = 80, # nodes perwalk trajectory
-      num_walks = 10, # walks starting from each node
-      p = 1.0, # return parameter
-      q =  1.0, # in-out parameter
-      workers = 4, # number of parallel workers
-    )
-
-    self.model = node2vec.fit(window=10, min_count=1)
-
-
+  # I will need a semantic score and pattern score for the candidate words
+  # this will be used to rank the candidate words for a slot based on their embeddings and pattern matching.
   # score the similarity between two nodes based on their embeddings
   def _score_word(self, slot_id, word):
     slot_vec = self.model.wv[slot_id]
     word_vec = self.model.wv[word]
   
-    return cosine_similarity(slot_vec, word_vec)
+    return self.cosine_similarity(slot_vec, word_vec)
 
 
   # rank the candidate words for a slot
@@ -485,6 +546,8 @@ class Node2VecAgent:
     
     return scored
 
+  # may need to update the consistency checking for the crossword and reuqirements for a non graph structure.
+  # this will probably just an array representation for both.
 
   # checking for consistency for the already assigned words.
   # this will ensure that the word fits all the intersections with already assigned words.
@@ -508,6 +571,8 @@ class Node2VecAgent:
     return None
   
 
+  # this will need to be changed 
+
   # this will apply the solution to the crossword grid for ease of readability
   def apply_solution_to_grid(self, solution):
     cw = self.puzzle.crossword
@@ -518,11 +583,12 @@ class Node2VecAgent:
       
       for (row, col), letter in zip(cells, word):
         cw.set_cell_letter(row, col, letter)
+      
+  '''
 
-
-# a node2vec agent with CSP structure.
+# a word2vec agent with CSP structure.
 # this will be extended to include for adding CSP algorithms.
-class Node2VecCSPAgent(Node2VecAgent):
+class CSPAgent(Word2VecAgent):
   def is_complete(self, assignment):
     return len(assignment) == len(self.puzzle.slots)
 
@@ -557,10 +623,10 @@ class Node2VecCSPAgent(Node2VecAgent):
     )
 
 
-# extention of the Node2VecAgent with backtracking search and forward checking to find a solution to the crossword puzzle.
-class Node2VecBacktrackingWithForwardCheckingAgent(Node2VecCSPAgent):
+# extention of the Word2VecAgent with backtracking search and forward checking to find a solution to the crossword puzzle.
+class BacktrackingWithForwardCheckingAgent(CSPAgent):
   def __str__(self):
-    return "Node2Vec Backtracking with Forward Checking Agent"
+    return "Word2Vec Backtracking with Forward Checking Agent"
 
   def __init__(self, puzzle):
     super().__init__(puzzle)
@@ -585,7 +651,7 @@ class Node2VecBacktrackingWithForwardCheckingAgent(Node2VecCSPAgent):
 
   # implementing the get_move method to return the next move based
   # on the solution found by the backtracking search with forward checking.
-  # this should remain compatible to the original get_move method in the Node2VecAgent class.
+  # this should remain compatible to the original get_move method in the Word2VecAgent class.
   def get_move(self, problem):
     # finiding the solution once and storing it for future moves.
     if self.solution is None:
@@ -604,10 +670,11 @@ class Node2VecBacktrackingWithForwardCheckingAgent(Node2VecCSPAgent):
     return None
 
 
-# a node2vec agent with conflict-directed backjumping and no-good learning.
-class Node2VecConflictDirectedBackjumpingWithNoGoodLearningAgent(Node2VecCSPAgent):
+
+# a word2vec agent with conflict-directed backjumping and no-good learning.
+class ConflictDirectedBackjumpingWithNoGoodLearningAgent(CSPAgent):
   def __str__(self):
-    return "Node2Vec Conflict-Directed Backjumping with No-Good Learning Agent"
+    return "Word2Vec Conflict-Directed Backjumping with No-Good Learning Agent"
 
 
   def __init__(self, puzzle):
@@ -820,22 +887,6 @@ class Node2VecRequirementCSPAgent:
     self.model = None
     self.csp = specification.build_csp()
 
-
-  def _train_embedding(self):
-    if self.spec.G.number_of_nodes() == 0:
-      self.spec.build_graph()
-
-    node2vec = Node2Vec(
-      self.spec.G,
-      dimensions = 128,
-      walk_length = 80,
-      num_walks = 10,
-      p = 1.0,
-      q = 1.0,
-      workers = 4,
-    )
-
-    self.model = node2vec.fit(window=10, min_count=1)
 
 
   def is_complete(self, assignment):

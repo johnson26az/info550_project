@@ -32,21 +32,21 @@ crossword = {
     "clues": {
         "across": {
             1: "A round object used in sports or games",
-            2: "A region or space",
-            3: "A substance made from plants, or to guide",
-            4: "A young woman",
             5: "A round object used in sports or games",
-            6: "A region or space",
-            7: "A substance made from plants, or to guide",
-            8: "A young woman",
-            9: "A round object used in sports or games",
+            9: "A region or space",
             10: "A region or space",
             11: "A substance made from plants, or to guide",
-            12: "A young woman",
-            13: "A round object used in sports or games",
-            14: "A region or space",
-            15: "A substance made from plants, or to guide",
-            16: "A young woman"
+            12: "A substance made from plants, or to guide",
+            13: "A young woman",
+            14: "A young woman",
+            15: "A round object used in sports or games",
+            19: "A round object used in sports or games",
+            23: "A region or space",
+            24: "A region or space",
+            25: "A substance made from plants, or to guide",
+            26: "A substance made from plants, or to guide",
+            27: "A young woman",
+            28: "A young woman"
         },
         "down": {
             1: "A round object used in sports or games",
@@ -57,14 +57,14 @@ crossword = {
             6: "A region or space",
             7: "A substance made from plants, or to guide",
             8: "A young woman",
-            9: "A round object used in sports or games",
-            10: "A region or space",
-            11: "A substance made from plants, or to guide",
-            12: "A young woman",
-            13: "A round object used in sports or games",
-            14: "A region or space",
-            15: "A substance made from plants, or to guide",
-            16: "A young woman"
+            15: "A round object used in sports or games",
+            16: "A region or space",
+            17: "A substance made from plants, or to guide",
+            18: "A young woman",
+            19: "A round object used in sports or games",
+            20: "A region or space",
+            21: "A substance made from plants, or to guide",
+            22: "A young woman"
         }
     },
 
