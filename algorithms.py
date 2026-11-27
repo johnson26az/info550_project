@@ -406,8 +406,6 @@ import re, os, gc
 
 from crosswords.puzzle01 import crossword as test_crossword
 
-TRIMMED_MODEL = "crossword_word2vec_trimmed.kv"
-
 
 '''
 class that implements a Word2Vec agent with base functionalities.
@@ -519,123 +517,97 @@ class Word2VecAgent:
     return filtered[:top_n] # return only the top N candidates after filtering
 
 
-
-'''
-  # abstract interface that returns a single move for the agent to make. this will be used by the problem to get the next move from the agent.
-  def get_move(self, problem):
-    # ensuring the graph exists
-    if not hasattr(problem, "G"):
-      problem.build_graph()
-
-    # training embeddeings once for the puzzle graph
-    if self.model is None:
-      self._train_embedding()
-
-    #  pick the next unassigned slot
-    slot_id = self.select_unassigned_slot(problem.assignment)
-
-    # rank the candidate words for the slot based on their embeddings
-    for word, _ in self._rank_candidates(slot_id):
-      # check if the word is consistent with the current assignment
-      if self._is_consistent(slot_id, word, problem.assignment):
-        return (slot_id, word)
-
-    return None # no consistent found
+# a word2vec agent with CSP structure.
+# this class will provide completion checking, consistency checking, domain ordering, and variable selection for the crossword puzzle.
+class CSPAgent(Word2VecAgent):
+  def is_complete(self, assignment):
+    return len(assignment) == len(self.puzzle.variables)
 
 
-  # I will need a semantic score and pattern score for the candidate words
-  # this will be used to rank the candidate words for a slot based on their embeddings and pattern matching.
-  # score the similarity between two nodes based on their embeddings
-  def _score_word(self, slot_id, word):
-    slot_vec = self.model.wv[slot_id]
-    word_vec = self.model.wv[word]
-  
-    return self.cosine_similarity(slot_vec, word_vec)
+  # checks if a word is consistent with the current assignment for a given variable (slot).
+  def is_consistent(self, variable, word, assignment):
+    required_length = (self.puzzle.get_length(variable))
 
+    if len(word) != required_length:
+      return False
 
-  # rank the candidate words for a slot
-  def _rank_candidates(self, slot_id):
-    candidates = self.puzzle.domain[slot_id]
-    scored = [(word, self._score_word(slot_id, word)) for word in candidates]
-    scored.sort(key = lambda x: x[1], reverse = True)
-    
-    return scored
+    if word in assignment.values():
+      return False
 
-  # may need to update the consistency checking for the crossword and reuqirements for a non graph structure.
-  # this will probably just an array representation for both.
+    for neighbor in self.puzzle.get_neighbors(variable):
+      if neighbor not in assignment:
+        continue
 
-  # checking for consistency for the already assigned words.
-  # this will ensure that the word fits all the intersections with already assigned words.
-  # this is the consistency check for the CSP problem.
-  def _is_consistent(self, slot_id, word, assignment):
-    # intesections are neighbor_slot_id -> (index_self, index_neighbor)
-    for neighbor_id, (index_self, index_neighbor) in self.puzzle.graph[slot_id]["intersections"].items():
-      if neighbor_id in assignment:
-        if word[index_self] != assignment[neighbor_id][index_neighbor]:
-          return False
-    
+      i, j = self.puzzle.get_intersections(variable, neighbor)
+      neighbor_word = assignment[neighbor]
+
+      if word[i] != neighbor_word[j]:
+        return False
+
     return True
 
 
-  # simple slot selection strategy: select the first unassigned slot.
-  def select_unassigned_slot(self, assignment):
-    for slot_id in self.puzzle.slots:
-      if slot_id not in assignment:
-        return slot_id
+  # this will rank the candidate words for a given slot based on their similarity scores to the clue and their compatibility with already assigned neighboring slots.
+  def sort_candidates(self, variable):
+    candidates = self.puzzle.get_domain(variable)
 
-    return None
-  
-
-  # this will need to be changed 
-
-  # this will apply the solution to the crossword grid for ease of readability
-  def apply_solution_to_grid(self, solution):
-    cw = self.puzzle.crossword
-
-    for slot_id, word in solution.items():
-      slot = self.puzzle.slots[slot_id]
-      cells = slot["cells"]
-      
-      for (row, col), letter in zip(cells, word):
-        cw.set_cell_letter(row, col, letter)
-      
-  '''
-
-# a word2vec agent with CSP structure.
-# this will be extended to include for adding CSP algorithms.
-class CSPAgent(Word2VecAgent):
-  def is_complete(self, assignment):
-    return len(assignment) == len(self.puzzle.slots)
+    return sorted(
+      candidates,
+      key=lambda item: item[1],
+      reverse=True
+    )
 
 
-  def is_consistent(self, slot_id, word, assignment):
-    return super()._is_consistent(slot_id, word, assignment)
+  # this will order the domain values for a given slot based on their ranking.
+  def order_domain_values(self, variable):
+    ranked = self.sort_candidates(variable)
+
+    return [word for word, score in ranked]
 
 
-  def order_domain_values(self, slot_id):
-    return [word for word, _ in self._rank_candidates(slot_id)]
-
-
-  def select_unassigned_variable(self, assignment):
-    return super().select_unassigned_slot(assignment)
-
-
-  # modified function for solving the specification decomposition problem. this will be used for the requirements decomposition problem.
-  # this gives an MRV heuristics directly on requirements
-  def select_unassigned_variable_req(self, assignment, domains):
+  # this will select the next unassigned variable (slot) based on the minimum remaining values (MRV) heuristic.
+  # this will be the default ordering function
+  def select_unassigned_variable_mrv(self, assignment):
     unassigned = [
-      req_id
-      for req_id in self.spec.requirements
-      if req_id not in assignment
+      variable
+      for variable in self.puzzle.variables
+      if variable not in assignment
     ]
 
     return min(
       unassigned,
-      key=lambda req_id: (
-        len(domains[req_id]),
-        -len(self.spec.G[req_id]) # tie-breaker: prefer requirements with more children
+      key=lambda variable: len(self.puzzle.get_domain(variable))
+    )
+
+
+  # MRV with degree heuristic as a tie-breaker.  this will be used for the conflict-directed backjumping agent.
+  def select_unassigned_variable_mrv_degree(self, assignment):
+    unassigned = [
+      variable
+      for variable in self.puzzle.variables
+      if variable not in assignment
+    ]
+
+    return min(
+      unassigned,
+      key=lambda variable: (
+        len(self.puzzle.get_domain(variable)),
+        -len(self.puzzle.get_neighbors(variable))
       )
     )
+
+
+  '''
+  utility functions
+  '''
+  def apply_solution_to_grid(self, solution):
+    crossword = self.puzzle.crossword
+  
+    for variable, word in solution.items():
+      cells = self.puzzle.slots[variable]["cells"]
+        
+      for (row, col), letter in zip(cells, word):
+        crossword.set_cell_letter(row, col, letter)
 
 
 # extention of the Word2VecAgent with backtracking search and forward checking to find a solution to the crossword puzzle.
@@ -643,9 +615,11 @@ class BacktrackingWithForwardCheckingAgent(CSPAgent):
   def __str__(self):
     return "Word2Vec Backtracking with Forward Checking Agent"
 
+
   def __init__(self, puzzle):
     super().__init__(puzzle)
     self.solution = None
+
   
   def solve(self):
     if not hasattr(self.puzzle, "G"):
