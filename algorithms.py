@@ -402,8 +402,7 @@ resources for understanding and using the Word2Vec model
 # Word2Vec implementation
 import gensim.downloader as api
 import numpy as np
-import re
-import os
+import re, os, gc
 
 from crosswords.puzzle01 import crossword as test_crossword
 
@@ -420,19 +419,11 @@ class Word2VecAgent:
     # loading the pre-trained Word2Vec model from Google News dataset
     self.model = self.load_model()
     self.clue_vectors = {} # store the clue vectors for each clue in the puzzle
-    self.domains = {} # store the domains for each slot in the puzzle
 
-    # pre-compute the clue vectors for each clue in the puzzle
-    for direction, clues in self.puzzle.crossword.clues.items():
-      # compute the vector representation for each clue and store it in the clue_vectors dictionary
-      for clue_number, clue_text in clues.items():
-        variable = (direction, clue_number)
-        slot_length = self.puzzle.slots[variable]["length"]
+    self.initialize_domains() # pre-compute the clue vectors and initialize the domains for each slot in the puzzle
 
-        self.clue_vectors[(direction, clue_number)] = (self.clue_to_vector(clue_text))
-
-        # initializing the domains for each slot in the puzzle
-        self.domains[variable] = self.generate_domains_for_single_clue(clue_text, slot_length)
+    del self.model # free up memory by deleting the model after pre-computation
+    gc.collect() # force garbage collection to free up memory
 
 
   def __str__(self):
@@ -461,7 +452,26 @@ class Word2VecAgent:
     return cosine_similarity
 
 
-  # function to convert a clue into a vector representation using the Word2Vec model
+  # reserve for generating the domains for all clues in the puzzle. this will be used to generate the domains for each slot in the puzzle.
+  def initialize_domains(self):
+    # pre-compute the clue vectors for each clue in the puzzle
+    print("Pre-computing clue vectors and initializing domains for each slot in the puzzle...")
+    
+    for direction, clues in self.puzzle.crossword.clues.items():
+      # compute the vector representation for each clue and store it in the clue_vectors dictionary
+      for clue_number, clue_text in clues.items():
+        variable = (direction, clue_number)
+        slot_length = self.puzzle.get_length(variable)
+    
+        self.clue_vectors[(direction, clue_number)] = (self.clue_to_vector(clue_text))
+    
+        # initializing the domains for each slot in the puzzle
+        self.puzzle.set_domain(variable, self.generate_domains_for_single_clue(clue_text, slot_length))
+    
+    print("Pre-computation complete.")
+
+
+  # this function to convert a clue into a vector representation using the Word2Vec model
   # returns the average vector of the words in the clue, or a zero vector if none of the words are in the model's vocabulary.
   def clue_to_vector(self, clue):
     words = re.findall(r'\b\w+\b', clue.lower())  # tokenize the clue into words, ignoring punctuation and case
@@ -496,12 +506,17 @@ class Word2VecAgent:
   # generating the domains for a signel clue based on the clue text and the slot length.
   # this will be used to generate the domains for each slot in the puzzle.
   def generate_domains_for_single_clue(self, clue, slot_length, top_n=100):
-    candidates = self.get_top_candidates(clue, top_n)
-    return candidates
+    candidates = self.get_top_candidates(clue, top_n * 5) # get more candidates to filter later
 
-  # reserve for generating the domains for all clues in the puzzle. this will be used to generate the domains for each slot in the puzzle.
-  def initialize_domains(self):
-    return None
+    filtered = []
+
+    for word, score in candidates:
+      clean_word = word.replace("_", "")
+
+      if len(clean_word) == slot_length and clean_word.isalpha():
+        filtered.append((clean_word.upper(), score))
+
+    return filtered[:top_n] # return only the top N candidates after filtering
 
 
 

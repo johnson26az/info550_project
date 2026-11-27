@@ -31,7 +31,7 @@ from crosswords.puzzle02 import crossword as crossword02
 from crosswords.puzzle03 import crossword as crossword03
 from crosswords.puzzle04 import crossword as crossword04
 
-from problems import Crossword, CrosswordPuzzle, PuzzleGame
+from problems import Crossword, CrosswordPuzzle
 
 from algorithms import GreedyRandomAgent
 from algorithms import Word2VecAgent
@@ -72,8 +72,7 @@ def test_word2vec_agent():
 
     # verifying the numbering and slots
     print("\n====VALIDATION=====")
-    print("slots valid:",
-          puzzle.validate_slots())
+    print("slots valid:", puzzle.validate_slots())
 
     agent = Word2VecAgent(puzzle)
 
@@ -94,7 +93,6 @@ def test_word2vec_agent():
             print(f"{word}: {score:.4f}")
 
 
-
 print("\nStarting the demo...\n"\
       "Current set up is: \n"\
       f"IS_RANDOM_AGENT: {IS_RANDOM_AGENT}\n"\
@@ -104,9 +102,8 @@ if IS_RANDOM_AGENT:
     CORRECT_SOLUTION = [list(row) for row in crossword03["solution_grid"]]
 
     cw = Crossword(
-        grid = Crossword.normalize_grid(crossword03["grid"]), # loads the grid
+        grid = crossword03["grid"], # loads the grid
         clues = crossword03["clues"], # loads the clues
-        word_bank = crossword03["word_bank"]
     )
 
     cw.print_grid()
@@ -181,18 +178,17 @@ else:
         MAX_ATTEMPTS = 10
 
         # testing calls
-        test_word2vec_agent()
+        #test_word2vec_agent()
 
         # creating the crossword puzzle object
         cw = Crossword(
-            grid = Crossword.normalize_grid(crossword02["grid"]), # loads the grid
+            grid = crossword02["grid"], # loads the grid
             clues = crossword02["clues"], # loads the clues
         )
-
         cw.print_grid()
         #cw.print_clues()
+        puzzle = CrosswordPuzzle(cw) # creating the crossword puzzle object
 
-        puzzle = CrosswordPuzzle(cw)
 
         
         '''
@@ -226,7 +222,8 @@ else:
 
     '''
 
-    else:
+    else: # requirements problem
+        '''
         # for requirements problem
         # getting the input file path
         #input_file_name = 'requirements_only.csv'
@@ -251,7 +248,7 @@ else:
         #spec.print_graph()
 
         # creating the agent
-        agent_req_0 = Node2VecRequirementsBacktrackingWithForwardCheckingAgent(spec)
+        agent_req_0 = RequirementsBacktrackingWithForwardCheckingAgent(spec)
         print(f"Running {agent_req_0.__str__()}...")
 
         # adding timer for solving the requirement decomposition problem
@@ -286,3 +283,4 @@ else:
 
         print(f"{agent_req_0.__str__()} solution:")
         agent_req_0.print_solution(solution)
+        '''

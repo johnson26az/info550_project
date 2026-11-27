@@ -161,19 +161,47 @@ class Crossword:
          print(f"{clue_id}: {clue}")
 
 
+'''
+crossword puzzle class formalizes the crossword puzzle as a CSP with variables, domains, and constraints.
+'''
 class CrosswordPuzzle:
    def __init__(self, crossword):
       self.crossword = crossword
+
       self.numbering = {}  # holds the numbering of the slots in the crossword grid
       self.slots = {}  # holds the crossword slots for each clue
       self.constraint_graph = {}  # this will hold the neighbor slots, intersections, and indices
-      self.assignment = {} # will hold the current assignment of words to slots
-
+      
       self.number_grid()  # number the slots in the crossword grid
       self.extract_slots()
       self.find_intersections()
-      self.variables = list(self.slots.keys())  # list of slot IDs for the CSP
 
+      # csp definitions for the problem
+      self.variables = list(self.slots.keys())  # list of slot IDs for the CSP
+      self.domains = {
+         variable: set()  # will hold the possible words for each slot
+         for variable in self.variables
+      }
+
+      # metadata for CSP, holds the neighbors for each variable in the constraint graph
+      self.neighbors = {
+         variable: set(self.constraint_graph[variable]["neighbors"])
+         for variable in self.variables
+      }
+
+      # metadata for CSP, holds the length constraints for each variable
+      self.length_constraints = {
+         variable: self.slots[variable]["length"]
+         for variable in self.variables
+      }
+
+      # metadata for CSP, holds the intersection indices for each variable
+      self.intersections = {
+         variable: self.constraint_graph[variable]["intersections"]
+         for variable in self.variables
+      }
+      
+      self.assignment = {} # will hold the current assignment of words to slots
 
    # extract all the slots from the crossword grid
    def extract_slots(self):
@@ -265,11 +293,23 @@ class CrosswordPuzzle:
 
    # get the neighbors of a given variable (slot ID) in the constraint graph
    def get_neighbors(self, variable):
-      return self.constraint_graph[variable]["neighbors"]
+      return self.neighbors[variable]
 
 
    def get_intersections(self, variable1, variable2):
-      return self.constraint_graph[variable1]["intersections"][variable2]
+      return self.intersections[variable1][variable2]
+
+
+   def get_domain(self, variable):
+      return self.domains[variable]
+
+
+   def set_domain(self, variable, domain):
+      self.domains[variable] = list(domain)
+
+
+   def get_length(self, variable):
+      return self.length_constraints[variable]
 
 
    # number the slots in the crossword grid for clues.
@@ -360,6 +400,21 @@ class CrosswordPuzzle:
       return clue_ids == slot_ids
 
 
+   # assign a value (word) to a variable (slot ID) in the current assignment
+   def assign(self, variable, value):
+      self.assignment[variable] = value
+
+
+   # unassign a variable (slot ID) from the current assignment
+   def unassign(self, variable):
+      if variable in self.assignment:
+         del self.assignment[variable]
+
+
+   def is_assigned(self, variable):
+      return variable in self.assignment
+   
+
    # check if the current assignment matches the correct solution
    def match_solution_grid(self, correct_solution):
       for r in range(self.crossword.rows):
@@ -386,51 +441,6 @@ class CrosswordPuzzle:
          print(f"  Neighbors: {data['neighbors']}")
          print(f"  Intersections: {data['intersections']}\n")
 
-
-class PuzzleGame:
-   def __init__(self, puzzle, agent, max_attempts, correct_solution):
-      self.problem = puzzle
-      self.agent = agent
-      self.max_attempts = max_attempts
-      self.correct_solution = correct_solution
-      self.initial_grid = [row[:] for row in puzzle.crossword.grid]
-
-   def solve_the_puzzle(self):
-      attempts = 0
-
-      while attempts < self.max_attempts:
-         self.problem.crossword.grid = [row[:] for row in self.initial_grid]
-         self.problem.assignment = {}  # reset the assignment for each attempt
-         agent = self.agent
-
-         # the agent solving the crossword puzzle
-         while len(self.problem.assignment) < len(self.problem.slots):
-            move = agent.get_move(self.problem)
-         
-            if move is None:
-               print("No more moves available.")
-               break
-
-            slot_id, word = move
-            self.problem.assignment[slot_id] = word
-
-         solution = self.problem.assignment
-         agent.apply_solution_to_grid(solution)
-
-         # checking the solution against the correct solution
-         if self.problem.match_solution_grid(self.correct_solution):
-            print("\nAGENT FOUND A CORRECT SOLUTION!")
-            print(f"Solution after {attempts + 1} attempts:")
-            self.problem.crossword.print_grid()
-            break
-         else:
-            print(f"\nAttempt {attempts + 1}: AGENT DID NOT FIND A CORRECT SOLUTION.")
-            attempts += 1
-            print(f"current attempts: {attempts}")
-
-      if attempts == self.max_attempts:
-         print(agent.__str__())
-         print("\nAGENT FAILED TO FIND A CORRECT SOLUTION AFTER MAX ATTEMPTS.")
 
 
 import networkx as nx
