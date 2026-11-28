@@ -34,7 +34,7 @@ from crosswords.puzzle04 import crossword as crossword04
 from problems import Crossword, CrosswordPuzzle
 
 from algorithms import GreedyRandomAgent
-from algorithms import Word2VecAgent
+from algorithms import Word2VecAgent, BacktrackingWithForwardCheckingAgent
 #from algorithms import Node2VecRequirementsBacktrackingWithForwardCheckingAgent
 
 from problems import Specification
@@ -189,6 +189,19 @@ else:
         #cw.print_clues()
         puzzle = CrosswordPuzzle(cw) # creating the crossword puzzle object
 
+        bactrackingwforwardagent = BacktrackingWithForwardCheckingAgent(puzzle)
+
+        # for coverage testng
+        bactrackingwforwardagent.evaluate_domain_coverage(CORRECT_SOLUTION)
+        #exit(0)
+        
+        solution = bactrackingwforwardagent.solve()
+
+        if solution:
+            print("\nAgent found a solution:")
+            bactrackingwforwardagent.print_solution(solution)
+        else:
+            print("\nAgent did not find a solution.")
 
         
         '''

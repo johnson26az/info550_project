@@ -319,79 +319,6 @@ class GreedyRandomAgent(RandomAgent):
           )
 
 
-# make a class for crossword puzzle algorithms
-# backtracking algorithm per figure 6.5 in the textbook (page 215).
-# will extend the word2vec agent later.
-def backtracking_search(agent, assignment):
-  if len(assignment) == len(agent.puzzle.slots):
-    return assignment
-
-  slot_id = agent.select_unassigned_variable(assignment)
-
-  for word in agent.order_domain_values(slot_id):
-    if agent.is_consistent(slot_id, word, assignment):
-      assignment[slot_id] = word
-      
-      result = backtracking_search(agent, assignment)
-      
-      if result is not None:
-        return result
-
-      del assignment[slot_id]
-
-  return None
-
-
-# returns true if the no domain wipeout occurs for any
-# unassigned variable after assigning the word to the slot.
-def forward_checking(puzzle, slot_id, word, assignment, domains):
-  intersections = puzzle.graph[slot_id]["intersections"]
-
-  for neighbor_id, (index_self, index_neighbor) in intersections.items():
-    if neighbor_id not in assignment:
-      new_domain = []
-
-      for candidate in domains[neighbor_id]:
-        if candidate[index_neighbor] == word[index_self]:
-          new_domain.append(candidate)
-
-      domains[neighbor_id] = new_domain
-
-      if len(new_domain) == 0:
-        return False
-
-  return True
-
-
-# backtracking with forward checking
-def backtracking_search_with_forward_checking(agent, assignment, domains):
-  if agent.is_complete(assignment):
-    return assignment
-
-  slot_id = agent.select_unassigned_variable(assignment)
-
-  for word in agent.order_domain_values(slot_id):
-    if agent.is_consistent(slot_id, word, assignment):
-      assignment[slot_id] = word
-      saved_domains = {
-        slot_id: list(values)
-        for slot_id, values in domains.items()
-      }
-
-      if forward_checking(agent.puzzle, slot_id, word, assignment, domains):
-        result = backtracking_search_with_forward_checking(agent, assignment, domains)
-        
-        if result is not None:
-          return result
-
-      del assignment[slot_id]
-
-      domains.clear()
-      domains.update(saved_domains)
-
-  return None
-
-
 '''
 resources for understanding and using the Word2Vec model
 - https://wiki.pathmind.com/word2vec
@@ -405,6 +332,9 @@ import numpy as np
 import re, os, gc
 
 from crosswords.puzzle01 import crossword as test_crossword
+
+TOP_N = 50000 # number of candidate words to consider for each clue
+MULTIPLIER = 10 # multiplier for the number of candidates to consider before filtering by length and alphabetic characters
 
 
 '''
@@ -503,8 +433,8 @@ class Word2VecAgent:
 
   # generating the domains for a signel clue based on the clue text and the slot length.
   # this will be used to generate the domains for each slot in the puzzle.
-  def generate_domains_for_single_clue(self, clue, slot_length, top_n=100):
-    candidates = self.get_top_candidates(clue, top_n * 5) # get more candidates to filter later
+  def generate_domains_for_single_clue(self, clue, slot_length, top_n=TOP_N):
+    candidates = self.get_top_candidates(clue, top_n * MULTIPLIER) # get more candidates to filter later
 
     filtered = []
 
@@ -547,27 +477,20 @@ class CSPAgent(Word2VecAgent):
     return True
 
 
-  # this will rank the candidate words for a given slot based on their similarity scores to the clue and their compatibility with already assigned neighboring slots.
-  def sort_candidates(self, variable):
-    candidates = self.puzzle.get_domain(variable)
-
-    return sorted(
-      candidates,
+  # this will order the domain values for a given slot based on their ranking.
+  def order_domain_values(self, variable, domains):
+    ranked = sorted(
+      domains[variable],
       key=lambda item: item[1],
       reverse=True
     )
-
-
-  # this will order the domain values for a given slot based on their ranking.
-  def order_domain_values(self, variable):
-    ranked = self.sort_candidates(variable)
 
     return [word for word, score in ranked]
 
 
   # this will select the next unassigned variable (slot) based on the minimum remaining values (MRV) heuristic.
   # this will be the default ordering function
-  def select_unassigned_variable_mrv(self, assignment):
+  def select_unassigned_variable_mrv(self, assignment, domains):
     unassigned = [
       variable
       for variable in self.puzzle.variables
@@ -576,12 +499,13 @@ class CSPAgent(Word2VecAgent):
 
     return min(
       unassigned,
-      key=lambda variable: len(self.puzzle.get_domain(variable))
+      key=lambda variable:
+      len(domains[variable])
     )
 
 
   # MRV with degree heuristic as a tie-breaker.  this will be used for the conflict-directed backjumping agent.
-  def select_unassigned_variable_mrv_degree(self, assignment):
+  def select_unassigned_variable_mrv_degree(self, assignment, domains):
     unassigned = [
       variable
       for variable in self.puzzle.variables
@@ -591,9 +515,22 @@ class CSPAgent(Word2VecAgent):
     return min(
       unassigned,
       key=lambda variable: (
-        len(self.puzzle.get_domain(variable)),
+        len(domains[variable]),
         -len(self.puzzle.get_neighbors(variable))
       )
+    )
+
+
+  def select_unassigned_variable_degree(self, assignment):
+    unassigned = [
+      variable
+      for variable in self.puzzle.variables
+      if variable not in assignment
+    ]
+
+    return max(
+      unassigned,
+      key=lambda variable: len(self.puzzle.get_neighbors(variable))
     )
 
 
@@ -610,6 +547,11 @@ class CSPAgent(Word2VecAgent):
         crossword.set_cell_letter(row, col, letter)
 
 
+  def evaluate_domain_coverage(self, solution_grid):
+    return self.puzzle.verify_domain_coverage(solution_grid)
+
+
+
 # extention of the Word2VecAgent with backtracking search and forward checking to find a solution to the crossword puzzle.
 class BacktrackingWithForwardCheckingAgent(CSPAgent):
   def __str__(self):
@@ -620,45 +562,103 @@ class BacktrackingWithForwardCheckingAgent(CSPAgent):
     super().__init__(puzzle)
     self.solution = None
 
+    # for statistics
+    self.nodes_expanded = 0
+    self.backtracks = 0
+
   
   def solve(self):
-    if not hasattr(self.puzzle, "G"):
-      self.puzzle.build_graph()
-
-    if self.model is None:
-      self._train_embedding()
-
     assignment = {}
-    domains = {slot_id: list(self.puzzle.domain[slot_id]) for slot_id in self.puzzle.slots}
+    domains = {
+      variable: list(self.puzzle.get_domain(variable))
+      for variable in self.puzzle.variables
+    }
+        
+    solution = self.backtrack(assignment, domains)
     
-    solution = backtracking_search_with_forward_checking(self, assignment, domains)
-    
-    if solution is not None:
+    if solution:
+      self.solution = solution
       self.apply_solution_to_grid(solution)
+
+    # for debugging and analysis, print the statistics of the search process
+    print(f"Nodes expanded: {self.nodes_expanded}")
+    print(f"Backtracks: {self.backtracks}")
     
     return solution
 
-  # implementing the get_move method to return the next move based
-  # on the solution found by the backtracking search with forward checking.
-  # this should remain compatible to the original get_move method in the Word2VecAgent class.
-  def get_move(self, problem):
-    # finiding the solution once and storing it for future moves.
-    if self.solution is None:
-      print("Computing CSP solution using backtracking with forward checking...")
-      self.solution = self.solve()
 
-    # no solution found, return None
-    if self.solution is None:
-      return None
+  def forward_check(self, variable, word, assignment, domains):
+    for neighbor in self.puzzle.get_neighbors(variable):
 
-    # return the next unassigned slot
-    for slot_id, word in self.solution.items():
-      if slot_id not in problem.assignment:
-        return (slot_id, word)
+      # ignores already assignd neighbors
+      if neighbor in assignment:
+        continue
 
+      # get crossing indeces for the current variable and its neighbor
+      i, j = self.puzzle.get_intersections(variable, neighbor)
+
+      # filter the domain of the neighbor based on the current assignment
+      new_domain = []
+
+      # check every value still available in the neighbor's domain
+      # to see if it is consistent with the current assignment
+      for candidate_word, score in domains[neighbor]:
+
+        # all-different constraint
+        if candidate_word in assignment.values():
+          continue
+
+        # crossing-letter constraint
+        if candidate_word[j] == word[i]:
+          new_domain.append((candidate_word, score))
+
+      # replace neighbot's domain with the filtered domain
+      domains[neighbor] = new_domain
+
+      # domain wipe-out
+      if len(new_domain) == 0:
+        return False
+
+    return True
+
+
+  # backtracking with forward checking
+  # backtracking algorithm per figure 6.5 in the textbook (page 215).
+  def backtrack(self, assignment, domains):
+    if self.is_complete(assignment):
+      return assignment
+
+    self.nodes_expanded += 1
+
+    variable = (self.select_unassigned_variable_mrv_degree(assignment, domains))
+
+    for word in self.order_domain_values(variable, domains):
+      if self.is_consistent(variable, word, assignment):
+        assignment[variable] = word
+
+        # save the current domains to restore later if needed
+        saved_domains = {
+          v: list(values)
+          for v, values
+          in domains.items()
+        }
+
+        if self.forward_check(variable, word, assignment, domains):
+          result = self.backtrack(assignment, domains)
+          
+          if result:
+            return result
+
+        assignment.pop(variable, None) # unassign the variable if no solution was found
+
+        domains.clear()
+        domains.update(saved_domains)
+
+    self.backtracks += 1
     return None
 
 
+'''
 
 # a word2vec agent with conflict-directed backjumping and no-good learning.
 class ConflictDirectedBackjumpingWithNoGoodLearningAgent(CSPAgent):
@@ -861,10 +861,12 @@ class ConflictDirectedBackjumpingWithNoGoodLearningAgent(CSPAgent):
         self.no_goods_learned += 1
 
     return None, set(self.conflict_sets[slot_id])
+'''
 
 
 
 
+'''
 # node2vec agent for requirements problem
 class Node2VecRequirementCSPAgent:
   def __str__(self):
@@ -1182,3 +1184,6 @@ class Node2VecRequirementsConflictDirectedBackjumpingWithNoGoodLearningAgent(Nod
     self.no_goods_learned = 0
 
   # need to work on this
+
+
+'''

@@ -122,7 +122,7 @@ Represents the crossword puzzle.
 '''
 class Crossword:
    def __init__(self, grid, clues):
-      self.grid = grid
+      self.grid = [list(row) for row in grid]
       self.clues = clues
 
       self.rows = len(grid)
@@ -441,6 +441,85 @@ class CrosswordPuzzle:
          print(f"  Neighbors: {data['neighbors']}")
          print(f"  Intersections: {data['intersections']}\n")
 
+
+   '''
+   utility functions for debugging
+   '''
+   def extract_word_from_solution(self, variable, solution_grid):
+      slot = self.slots[variable]
+      letters = []
+
+      for row, col in slot["cells"]:
+         letters.append(solution_grid[row][col])
+
+      return "".join(letters).upper()
+
+
+   def get_domain_rank(self, variable, word):
+      domain = self.domains[variable]
+
+      for rank, (candidate, score) in enumerate(domain, start=1):
+         if candidate == word:
+            return rank
+
+      return None
+
+
+   def domain_contains_word(self, variable, word):
+      domain_words = {
+         candidate
+         for candidate, score
+         in self.get_domain(variable)
+      }
+
+      return word in domain_words
+
+
+   def verify_domain_coverage(self, solution_grid):
+      print("\nDOMAIN COVERAGE VERIFICATION\n")
+
+      found = 0
+      total = len(self.variables)
+      missing_words = []
+
+      for variable in self.variables:
+         answer = self.extract_word_from_solution(variable, solution_grid)
+
+         rank = self.get_domain_rank(variable, answer)
+
+         if rank is not None:
+            found += 1
+
+            print(
+               f"[FOUND] {variable}",
+               f"-> {answer}",
+               f" (rank: {rank})"
+            )
+         else:
+            missing_words.append((variable, answer))
+
+            print(
+               f"[MISSING] {variable}",
+               f"-> {answer}",
+               "not found in domain"
+            )
+
+      coverage = (
+         found / total * 100
+         if total > 0 else 0
+      )
+
+      print("\nSummary:")
+      print(f"Total variables: {total}")
+      print(f"Found in domain: {found}")
+      print(f"Coverage: {coverage:.2f}%")
+
+      if missing_words:
+         print("\nMissing words:")
+         for variable, answer in missing_words:
+            print(f"{variable} -> {answer}")
+
+      return coverage
 
 
 import networkx as nx
